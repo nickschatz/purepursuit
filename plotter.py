@@ -1,6 +1,6 @@
 import math
 import matplotlib.pylab as plot
-from pursuit import Waypoint, Pose, curvature
+from pursuit import Vector2, Pose, curvature
 
 
 def radius_ratio(R, D):
@@ -14,7 +14,7 @@ if __name__ == '__main__':
     target_y = []
     distance = []
     times = []
-    path = [Waypoint(0, 0), Waypoint(6, 0), Waypoint(6, 20)]
+    path = [Vector2(0, 0), Vector2(6, 0), Vector2(6, 20)]
     pose = Pose(0, 0, 0 * math.pi/4)
     width = 1
     speed = 1
@@ -25,11 +25,7 @@ if __name__ == '__main__':
         time += dt
         if time >= 30:
             break
-        try:
-            curve, target = curvature(pose, path, 1)
-        except:
-            print("Break")
-            break
+        curve, target = curvature(pose, path, 1)
         if curve == 0:
             left_speed = right_speed = speed
         else:

@@ -1,43 +1,8 @@
-from typing import List, Tuple
-import math
+from typing import List, Tuple, Optional, Union
+from mathlib import Line, Vector2
 
 
-class Waypoint:
-    """
-    Waypoint for path planning. x,y are in world coordinates
-    """
-
-    def __init__(self, x: float, y: float):
-        self.x = x
-        self.y = y
-
-    def translated(self, pose):
-        dx = self.x - pose.x
-        dy = self.y - pose.y
-        dxp = dx * math.cos(pose.heading) - dy * math.sin(pose.heading)
-        dyp = dx * math.sin(pose.heading) + dy * math.cos(pose.heading)
-        return Waypoint(dxp, dyp)
-
-    def inv_translate(self, pose):
-        dxp = self.x * math.cos(pose.heading) + self.y * math.sin(pose.heading)
-        dyp = self.x * -math.sin(pose.heading) + self.y * math.cos(pose.heading)
-        return Waypoint(dxp + pose.x, dyp + pose.y)
-
-    def distance(self, point):
-        return ((point.x - self.x)**2 + (point.y - self.y)**2)**0.5
-
-    def __repr__(self):
-        return "Waypoint({}, {})".format(self.x, self.y)
-
-    def __sub__(self, other):
-        assert type(other) == Waypoint
-        return Waypoint(self.x - other.x, self.y - other.y)
-
-    def __abs__(self):
-        return self.distance(Waypoint(0, 0))
-
-
-class Pose(Waypoint):
+class Pose(Vector2):
     """
     Robot pose in world coordinates
     """
@@ -46,7 +11,7 @@ class Pose(Waypoint):
         self.heading = heading
 
 
-def line_circ_intercepts(p1: Waypoint, p2: Waypoint, r: float) -> Tuple[Waypoint, Waypoint]:
+def line_circ_intercepts(p1: Vector2, p2: Vector2, r: float) -> Tuple[Vector2, Vector2]:
     dx = p2.x - p1.x
     dy = p2.y - p1.y
     dr = (dx**2 + dy**2)**0.5
@@ -59,33 +24,32 @@ def line_circ_intercepts(p1: Waypoint, p2: Waypoint, r: float) -> Tuple[Waypoint
     y_pm = abs(dy) * discriminant ** 0.5
     x1, x2 = (D * dy + x_pm) / dr**2, (D * dy - x_pm) / dr**2
     y1, y2 = (-D * dx + y_pm) / dr**2, (-D * dx - y_pm) / dr**2
-    return Waypoint(x1, y1), Waypoint(x2, y2)
+    return Vector2(x1, y1), Vector2(x2, y2)
 
 
-def curvature(pose: Pose, path: List[Waypoint], lookahead: float) -> Tuple[float, Waypoint]:
+def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float, Vector2]:
     # Get lookahead point
-    dist_sorted_path = sorted(path, key=lambda x: x.distance(pose))
-    closest_point = dist_sorted_path[0]
-    next_closest = dist_sorted_path[1]
-    idx = path.index(closest_point)
-    if idx == len(path) - 1:
-        next_point = path[idx - 1]
-    else:
-        next_point = path[idx + 1]
-    next_point = next_point.translated(pose)
-    closest_point = closest_point.translated(pose)
-    try:
-        p1, p2 = line_circ_intercepts(closest_point, next_point, lookahead)
-    except ValueError:
-        next_point = path[idx - 1].translated(pose)
-        p1, p2 = line_circ_intercepts(closest_point, next_point, lookahead)
-    # Choose closer to goal
-    if p1.distance(next_point) < p2.distance(next_point):
-        goal = p1
-    else:
-        goal = p2
-    curv = 2 * goal.y / lookahead**2
-    print("{} {} {} {}".format(curv, closest_point.inv_translate(pose), next_point.inv_translate(pose),
-                               goal.inv_translate(pose)))
+    path_lines = []
+    for k in range(len(path) - 1):
+        path_lines += [Line(path[k], path[k+1])]
+    # For each line if the projected distance is less than lookahead, find points on that line that match lookahead distance
+    possible_points = []
+    for line in path_lines:
+        project = line.projected_point(pose)
+        dist = project.distance(pose)
+        if dist < lookahead:
+            t = line.invert(project)
+            d = (lookahead**2 - dist**2)**0.5
+            possible_points += [line.r(t + d), line.r(t - d)]
+    # Find the closest point to the end of the path
+    if len(possible_points) == 0:
+        raise Exception("Too far away from path")
+    goal = sorted(possible_points, key=lambda x: x.distance(path[-1]))[0]
+    if len(possible_points) > 2:
+        for k in possible_points:
+            if k == goal:
+                print("* ", end="")
+            print(k.distance(path[-1]))
+    curv = 2 * goal.translated(pose).y / lookahead ** 2
 
-    return curv, goal.inv_translate(pose)
+    return curv, goal
