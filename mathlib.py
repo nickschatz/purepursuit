@@ -1,5 +1,6 @@
 import math
 from typing import Union
+import numpy as np
 
 
 class Vector2:
@@ -55,6 +56,8 @@ class Line:
     def __init__(self, point1: Vector2, point2: Vector2):
         self.slope = Vector2(point2.x - point1.x, point2.y - point1.y).normalized()
         self.intersect = point1
+        self.point1 = point1
+        self.point2 = point2
 
     def projected_point(self, point: Vector2):
         pt = point - self.intersect

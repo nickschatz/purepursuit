@@ -1,6 +1,8 @@
 from typing import List, Tuple, Optional, Union
 from mathlib import Line, Vector2
 
+import numpy as np
+
 
 class Pose(Vector2):
     """
@@ -9,6 +11,12 @@ class Pose(Vector2):
     def __init__(self, x: float, y: float, heading: float):
         super().__init__(x, y)
         self.heading = heading
+
+    def get_transform_matrix(self):
+        c = np.cos(self.heading)
+        s = np.sin(self.heading)
+        mat = np.array([[c, -s, -self.x], [s, c, -self.y], [0, 0, 1]])
+        return mat
 
 
 def line_circ_intercepts(p1: Vector2, p2: Vector2, r: float) -> Tuple[Vector2, Vector2]:
@@ -38,18 +46,24 @@ def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float,
         project = line.projected_point(pose)
         dist = project.distance(pose)
         if dist < lookahead:
+            p2 = line.point2
+            idx = path.index(p2)
             t = line.invert(project)
             d = (lookahead**2 - dist**2)**0.5
-            possible_points += [line.r(t + d), line.r(t - d)]
+            possible_points += [line.r(t + d)]
     # Find the closest point to the end of the path
     if len(possible_points) == 0:
         raise Exception("Too far away from path")
+    # Get closest of candidate points to goal
     goal = sorted(possible_points, key=lambda x: x.distance(path[-1]))[0]
-    if len(possible_points) > 2:
+    if len(possible_points) > 1:
         for k in possible_points:
             if k == goal:
                 print("* ", end="")
-            print(k.distance(path[-1]))
+            print("{} {}".format(k.distance(path[-1]), k))
+        print("--")
+    goal.y *= -1
     curv = 2 * goal.translated(pose).y / lookahead ** 2
-
+    print("{}, {}".format(curv, goal.translated(pose)))
+    goal.y *= -1
     return curv, goal
