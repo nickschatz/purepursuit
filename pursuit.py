@@ -1,7 +1,7 @@
 from typing import List, Tuple, Optional, Union
 from mathlib import Line, Vector2
 
-import numpy as np
+import copy
 
 
 class Pose(Vector2):
@@ -11,12 +11,6 @@ class Pose(Vector2):
     def __init__(self, x: float, y: float, heading: float):
         super().__init__(x, y)
         self.heading = heading
-
-    def get_transform_matrix(self):
-        c = np.cos(self.heading)
-        s = np.sin(self.heading)
-        mat = np.array([[c, -s, -self.x], [s, c, -self.y], [0, 0, 1]])
-        return mat
 
 
 def line_circ_intercepts(p1: Vector2, p2: Vector2, r: float) -> Tuple[Vector2, Vector2]:
@@ -35,7 +29,9 @@ def line_circ_intercepts(p1: Vector2, p2: Vector2, r: float) -> Tuple[Vector2, V
     return Vector2(x1, y1), Vector2(x2, y2)
 
 
-def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float, Vector2]:
+def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float, Vector2, List[Line]]:
+
+
     # Get lookahead point
     path_lines = []
     for k in range(len(path) - 1):
@@ -50,10 +46,12 @@ def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float,
             idx = path.index(p2)
             t = line.invert(project)
             d = (lookahead**2 - dist**2)**0.5
-            possible_points += [line.r(t + d)]
+            candidate = line.r(t + d)
+            possible_points += [candidate]
+            assert abs(candidate.distance(pose) - lookahead) < 1e-2
     # Find the closest point to the end of the path
     if len(possible_points) == 0:
-        raise Exception("Too far away from path")
+        raise ValueError("Too far away from path")
     # Get closest of candidate points to goal
     goal = sorted(possible_points, key=lambda x: x.distance(path[-1]))[0]
     if len(possible_points) > 1:
@@ -62,8 +60,6 @@ def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float,
                 print("* ", end="")
             print("{} {}".format(k.distance(path[-1]), k))
         print("--")
-    goal.y *= -1
     curv = 2 * goal.translated(pose).y / lookahead ** 2
     print("{}, {}".format(curv, goal.translated(pose)))
-    goal.y *= -1
-    return curv, goal
+    return curv, goal, path_lines

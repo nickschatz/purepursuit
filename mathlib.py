@@ -2,6 +2,8 @@ import math
 from typing import Union
 import numpy as np
 
+import pursuit
+
 
 class Vector2:
     """
@@ -45,11 +47,14 @@ class Vector2:
         return Vector2(self.x - other.x, self.y - other.y)
 
     def __add__(self, other):
-        assert type(other) == Vector2
+        assert type(other) == Vector2 or type(other) == pursuit.Pose
         return Vector2(self.x + other.x, self.y + other.y)
 
     def __abs__(self):
         return self.distance(Vector2(0, 0))
+
+    def __copy__(self):
+        return Vector2(self.x, self.y)
 
 
 class Line:
@@ -58,6 +63,19 @@ class Line:
         self.intersect = point1
         self.point1 = point1
         self.point2 = point2
+
+    def plot(self, plt, resolution=0.1):
+        t0 = 0
+        t1 = self.invert(self.point2)
+        i = t0
+        xx = []
+        yy = []
+        while i < t1:
+            p = self.r(i)
+            xx += [p.x]
+            yy += [p.y]
+            i += resolution
+        plt.plot(xx, yy)
 
     def projected_point(self, point: Vector2):
         pt = point - self.intersect
@@ -74,6 +92,15 @@ class Line:
 
     def r(self, t):
         return self.intersect + self.slope * t
+
+    def on_line(self, point, epsilon=1e-3):
+
+        tr_point = point - self.intersect
+        if self.slope.x == 0:
+            return abs(tr_point.x) < epsilon
+        elif self.slope.y == 0:
+            return abs(tr_point.y) < epsilon
+        return abs(tr_point.x / self.slope.x - tr_point.y / self.slope.y) < epsilon
 
     def __repr__(self):
         return "Line(t<{}, {}> + <{}, {}>".format(self.slope.x, self.slope.y, self.intersect.x, self.intersect.y)
