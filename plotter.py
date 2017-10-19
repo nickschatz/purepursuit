@@ -16,10 +16,10 @@ if __name__ == '__main__':
     targetp_y = []
     distance = []
     times = []
-    path = [Vector2(0, 0), Vector2(12, 0), Vector2(24, 2)]
+    path = [Vector2(0, 0), Vector2(2.1, 0), Vector2(5.1, 3)]
     pose = Pose(0, 0, 0 * math.pi/4)
     width = 1
-    speed = 1
+    speed = 30
     lookahead = 2
     dt = 1/100
     time = 0
@@ -47,11 +47,12 @@ if __name__ == '__main__':
 
         left_dist = left_speed * dt
         right_dist = right_speed * dt
-        dist = (left_dist + right_dist) / 2
-        pose.x += dist * math.cos(pose.heading)
-        pose.y += dist * math.sin(pose.heading)
-        pose.heading += (right_dist - left_dist) / width
+        vel = (left_speed + right_speed) / 2
+        angular_rate = (right_speed - left_speed) / width
 
+        pose.x += dt * speed * math.cos(pose.heading)
+        pose.y += dt * speed * math.sin(pose.heading)
+        pose.heading += dt * angular_rate
         # print("{}\t{}\t{}\t{}\t{}\t{}".format(time, pose.x, pose.y, target.x, target.y, pose.distance(path[-1])))
 
         target_x += [target.x]
@@ -63,13 +64,15 @@ if __name__ == '__main__':
         travel_y += [pose.y]
         distance += [pose.distance(path[-1])]
         times += [time]
-    # plot.figure(1)
-    # plot.plot(travel_x, travel_y)
-    # plot.plot(target_x, target_y)
-    # for wp in path:
-    #     plot.plot(wp.x, wp.y, 'bo')
-    # for k in range(len(travel_x)):
-    #     plot.plot([travel_x[k], target_x[k]], [travel_y[k], target_y[k]])
+    plot.figure(1)
+    plot.plot(travel_x, travel_y)
+    plot.plot(targetp_x, targetp_y)
+    for line in lines:
+        line.plot(plot)
+    for wp in path:
+        plot.plot(wp.x, wp.y, 'bo')
+    for k in range(len(travel_x)):
+        plot.plot([travel_x[k], target_x[k]], [travel_y[k], target_y[k]])
     plot.figure(2)
     plot.plot(travel_x, travel_y)
     plot.plot(targetp_x, targetp_y)
@@ -78,12 +81,13 @@ if __name__ == '__main__':
         line.plot(plot)
     for wp in path:
         plot.plot(wp.x, wp.y, 'bo')
+    plot.figure(3)
     # plot.plot(distance)
     #plot.plot(travel_x)
-    #plot.plot(travel_y)
+    plot.plot(travel_y)
     #plot.figure(2)
     #plot.plot(distance)
-    #plot.plot(target_y)
+    plot.plot(target_y)
     plot.show()
 
 

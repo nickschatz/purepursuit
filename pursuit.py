@@ -12,6 +12,9 @@ class Pose(Vector2):
         super().__init__(x, y)
         self.heading = heading
 
+    def __repr__(self):
+        return "Pose(x={}, y={}, heading={})".format(self.x, self.y, self.heading)
+
 
 def line_circ_intercepts(p1: Vector2, p2: Vector2, r: float) -> Tuple[Vector2, Vector2]:
     dx = p2.x - p1.x
