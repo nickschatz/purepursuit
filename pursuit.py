@@ -63,6 +63,6 @@ def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float,
                 print("* ", end="")
             print("{} {}".format(k.distance(path[-1]), k))
         print("--")
-    curv = 2 * goal.translated(pose).y / lookahead ** 2
+    curv = -2 * goal.translated(pose).y / lookahead ** 2
     print("{}, {}".format(curv, goal.translated(pose)))
     return curv, goal, path_lines

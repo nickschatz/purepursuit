@@ -17,13 +17,17 @@ class Vector2:
     def translated(self, pose):
         dx = self.x - pose.x
         dy = self.y - pose.y
-        dxp = dx * math.cos(pose.heading) - dy * math.sin(pose.heading)
-        dyp = dx * math.sin(pose.heading) + dy * math.cos(pose.heading)
+        c = math.cos(pose.heading)
+        s = math.sin(pose.heading)
+        dxp = dx * c + dy * s
+        dyp = dx * -s + dy * c
         return Vector2(dxp, dyp)
 
     def inv_translate(self, pose):
-        dxp = self.x * math.cos(pose.heading) + self.y * math.sin(pose.heading)
-        dyp = self.x * -math.sin(pose.heading) + self.y * math.cos(pose.heading)
+        c = math.cos(pose.heading)
+        s = math.sin(pose.heading)
+        dxp = self.x * c - self.y * s
+        dyp = self.x * s + self.y * c
         return Vector2(dxp + pose.x, dyp + pose.y)
 
     def distance(self, point):
@@ -55,6 +59,9 @@ class Vector2:
 
     def __copy__(self):
         return Vector2(self.x, self.y)
+
+    def __neg__(self):
+        return self * -1
 
 
 class Line:

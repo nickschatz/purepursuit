@@ -16,18 +16,18 @@ if __name__ == '__main__':
     targetp_y = []
     distance = []
     times = []
-    path = [Vector2(0, 0), Vector2(2.1, 0), Vector2(5.1, 3)]
+    path = [Vector2(0, 0), Vector2(4, 0), Vector2(4, 4)]
     pose = Pose(0, 0, 0 * math.pi/4)
     width = 1
-    speed = 30
-    lookahead = 2
+    speed = 0.1
+    lookahead = 1
     dt = 1/100
     time = 0
     lines = []
 
     while pose.distance(path[-1]) > 1e-2:
         time += dt
-        if time >= 30:
+        if time >= 100:
             break
         try:
             curve, target, lines = curvature(pose, path, lookahead)
@@ -64,30 +64,13 @@ if __name__ == '__main__':
         travel_y += [pose.y]
         distance += [pose.distance(path[-1])]
         times += [time]
-    plot.figure(1)
-    plot.plot(travel_x, travel_y)
-    plot.plot(targetp_x, targetp_y)
-    for line in lines:
-        line.plot(plot)
-    for wp in path:
-        plot.plot(wp.x, wp.y, 'bo')
-    for k in range(len(travel_x)):
-        plot.plot([travel_x[k], target_x[k]], [travel_y[k], target_y[k]])
     plot.figure(2)
     plot.plot(travel_x, travel_y)
-    plot.plot(targetp_x, targetp_y)
     plot.plot(target_x, target_y)
     for line in lines:
         line.plot(plot)
     for wp in path:
         plot.plot(wp.x, wp.y, 'bo')
-    plot.figure(3)
-    # plot.plot(distance)
-    #plot.plot(travel_x)
-    plot.plot(travel_y)
-    #plot.figure(2)
-    #plot.plot(distance)
-    plot.plot(target_y)
     plot.show()
 
 

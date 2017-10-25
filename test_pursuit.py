@@ -24,7 +24,7 @@ def test_translate():
     pose2 = pursuit.Pose(1, 1, math.pi / 4)
     assert eq_epsilon(p1.translated(pose), Vector2(1, 1))
     assert eq_epsilon(p2.translated(pose), Vector2(1, 0))
-    assert eq_epsilon(p1.translated(pose2), Vector2(0, 2 ** 0.5))
+    assert eq_epsilon(p1.translated(pose2), Vector2(2 ** 0.5, 0))
 
     assert eq_epsilon(p1.translated(pose2).inv_translate(pose2), p1)
     assert eq_epsilon(p2.translated(pose2).inv_translate(pose2), p2)
