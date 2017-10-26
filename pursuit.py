@@ -1,5 +1,5 @@
 from typing import List, Tuple, Optional, Union
-from mathlib import Line, Vector2
+from mathlib import LineSegment, Vector2
 
 import copy
 
@@ -32,37 +32,26 @@ def line_circ_intercepts(p1: Vector2, p2: Vector2, r: float) -> Tuple[Vector2, V
     return Vector2(x1, y1), Vector2(x2, y2)
 
 
-def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float, Vector2, List[Line]]:
-
-
+def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float, Vector2, List[LineSegment]]:
     # Get lookahead point
     path_lines = []
     for k in range(len(path) - 1):
-        path_lines += [Line(path[k], path[k+1])]
+        path_lines += [LineSegment(path[k], path[k + 1])]
     # For each line if the projected distance is less than lookahead, find points on that line that match lookahead distance
     possible_points = []
     for line in path_lines:
         project = line.projected_point(pose)
         dist = project.distance(pose)
-        if dist < lookahead:
-            p2 = line.point2
-            idx = path.index(p2)
+        if dist <= lookahead:
             t = line.invert(project)
             d = (lookahead**2 - dist**2)**0.5
-            candidate = line.r(t + d)
-            possible_points += [candidate]
-            assert abs(candidate.distance(pose) - lookahead) < 1e-2
+            if line.in_segment(t + d):
+                candidate = line.r(t + d)
+                possible_points += [candidate]
     # Find the closest point to the end of the path
     if len(possible_points) == 0:
-        raise ValueError("Too far away from path")
-    # Get closest of candidate points to goal
-    goal = sorted(possible_points, key=lambda x: x.distance(path[-1]))[0]
-    if len(possible_points) > 1:
-        for k in possible_points:
-            if k == goal:
-                print("* ", end="")
-            print("{} {}".format(k.distance(path[-1]), k))
-        print("--")
+        goal = path[-1]
+    else: # Get closest of candidate points to goal
+        goal = sorted(possible_points, key=lambda x: x.distance(path[-1]))[0]
     curv = -2 * goal.translated(pose).y / lookahead ** 2
-    print("{}, {}".format(curv, goal.translated(pose)))
     return curv, goal, path_lines

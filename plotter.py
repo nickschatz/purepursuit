@@ -1,5 +1,7 @@
 import math
 import matplotlib.pylab as plot
+import time
+
 from pursuit import Vector2, Pose, curvature
 
 
@@ -16,18 +18,22 @@ if __name__ == '__main__':
     targetp_y = []
     distance = []
     times = []
-    path = [Vector2(0, 0), Vector2(4, 0), Vector2(4, 4)]
-    pose = Pose(0, 0, 0 * math.pi/4)
-    width = 1
-    speed = 0.1
+    width = 29.25 / 12
+    hopper_x = -2.47 + width / 2 - width
+    hopper_y = 6 + 6.5/12 + width / 2
+    path = [Vector2(0, 0), Vector2(0, 6), Vector2(-4, 6), Vector2(-4, 0)]
+    pose = Pose(0, 0, 2 * math.pi/4)
+
+    speed = 13
     lookahead = 1
-    dt = 1/100
-    time = 0
+    dt = 1/1000
+    current_time = 0
     lines = []
 
-    while pose.distance(path[-1]) > 1e-2:
-        time += dt
-        if time >= 100:
+    start = time.perf_counter()
+    while pose.distance(path[-1]) > 1/12:
+        current_time += dt
+        if current_time >= 100:
             break
         try:
             curve, target, lines = curvature(pose, path, lookahead)
@@ -63,12 +69,15 @@ if __name__ == '__main__':
         travel_x += [pose.x]
         travel_y += [pose.y]
         distance += [pose.distance(path[-1])]
-        times += [time]
+        times += [current_time]
+    elapsed_realtime = time.perf_counter() - start
+    print("Simulated {} seconds in {} real seconds".format(current_time, elapsed_realtime))
     plot.figure(2)
-    plot.plot(travel_x, travel_y)
-    plot.plot(target_x, target_y)
     for line in lines:
         line.plot(plot)
+    plot.plot(travel_x, travel_y)
+    # plot.plot(target_x, target_y)
+
     for wp in path:
         plot.plot(wp.x, wp.y, 'bo')
     plot.show()

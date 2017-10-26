@@ -64,16 +64,18 @@ class Vector2:
         return self * -1
 
 
-class Line:
+class LineSegment:
     def __init__(self, point1: Vector2, point2: Vector2):
-        self.slope = Vector2(point2.x - point1.x, point2.y - point1.y).normalized()
+        d = Vector2(point2.x - point1.x, point2.y - point1.y)
+        self.slope = d.normalized()
+        self.max_t = abs(d)
         self.intersect = point1
         self.point1 = point1
         self.point2 = point2
 
     def plot(self, plt, resolution=0.1):
         t0 = 0
-        t1 = self.invert(self.point2)
+        t1 = self.max_t
         i = t0
         xx = []
         yy = []
@@ -98,9 +100,11 @@ class Line:
         return (tr_point.x / self.slope.x + tr_point.y / self.slope.y) / 2
 
     def r(self, t):
+        if t > self.max_t or t < 0:
+            raise ValueError("t outside range")
         return self.intersect + self.slope * t
 
-    def on_line(self, point, epsilon=1e-3):
+    def on_line(self, point: Vector2, epsilon=1e-3):
 
         tr_point = point - self.intersect
         if self.slope.x == 0:
@@ -108,6 +112,9 @@ class Line:
         elif self.slope.y == 0:
             return abs(tr_point.y) < epsilon
         return abs(tr_point.x / self.slope.x - tr_point.y / self.slope.y) < epsilon
+
+    def in_segment(self, t: float):
+        return 0 <= t <= self.max_t
 
     def __repr__(self):
         return "Line(t<{}, {}> + <{}, {}>".format(self.slope.x, self.slope.y, self.intersect.x, self.intersect.y)

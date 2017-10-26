@@ -1,7 +1,7 @@
 import math
 
 import pursuit
-from mathlib import Vector2, Line
+from mathlib import Vector2, LineSegment
 
 
 def eq_epsilon(a, b, epsilon=1e-4):
@@ -35,7 +35,7 @@ def test_translate():
 def test_lines():
     p1 = Vector2(0, 0)
     p2 = Vector2(1, 1)
-    L = Line(p1, p2)
+    L = LineSegment(p1, p2)
     assert eq_epsilon(L.r(0), p1)
     assert eq_epsilon(L.invert(p1), 0)
     assert eq_epsilon(L.r(2**0.5), p2)
