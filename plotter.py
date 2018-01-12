@@ -2,7 +2,8 @@ import math
 import matplotlib.pylab as plot
 import time
 
-from pursuit import Vector2, Pose, curvature
+from pursuit import Pose, PurePursuitController
+from mathlib import Vector2
 
 
 def radius_ratio(R, D):
@@ -19,24 +20,28 @@ if __name__ == '__main__':
     distance = []
     times = []
     width = 29.25 / 12
+    max_speed = 13
+    acc = 10
     hopper_x = -2.47 + width / 2 - width
     hopper_y = 6 + 6.5/12 + width / 2
-    path = [Vector2(0, 0), Vector2(0, 6), Vector2(-4, 6), Vector2(-4, 0)]
-    pose = Pose(0, 0, 2 * math.pi/4)
+    path = [Vector2(0, 0), Vector2(5, 0), Vector2(0, 5), Vector2(5, 10)]
+    pose = Pose(0, 0, 0 * math.pi/4)
+    speed = max_speed
 
-    speed = 13
     lookahead = 1
     dt = 1/1000
     current_time = 0
     lines = []
 
+    pursuit = PurePursuitController(pose, path, lookahead)
+
     start = time.perf_counter()
-    while pose.distance(path[-1]) > 1/12:
+    while not pursuit.is_at_end(pose):
         current_time += dt
-        if current_time >= 100:
+        if current_time >= 10:
             break
         try:
-            curve, target, lines = curvature(pose, path, lookahead)
+            curve, target, lines = pursuit.curvature(pose, speed)
         except ValueError:
             print("Break")
             break

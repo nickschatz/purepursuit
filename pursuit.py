@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional, Union
+from typing import List, Tuple, Optional, Union, Callable
 from mathlib import LineSegment, Vector2
 
 import copy
@@ -16,42 +16,133 @@ class Pose(Vector2):
         return "Pose(x={}, y={}, heading={})".format(self.x, self.y, self.heading)
 
 
-def line_circ_intercepts(p1: Vector2, p2: Vector2, r: float) -> Tuple[Vector2, Vector2]:
-    dx = p2.x - p1.x
-    dy = p2.y - p1.y
-    dr = (dx**2 + dy**2)**0.5
-    D = p1.x * p2.y - p2.x * p1.y
-    discriminant = r**2 * dr**2 - D**2
-    if discriminant < 0:
-        # print ("Circle and line do not intersect {} {} ".format(p1, p2))
-        raise ValueError("Circle and line do not intersect {} {}".format(p1, p2))
-    x_pm = (-1 if dy < 0 else 1) * dx * discriminant ** 0.5
-    y_pm = abs(dy) * discriminant ** 0.5
-    x1, x2 = (D * dy + x_pm) / dr**2, (D * dy - x_pm) / dr**2
-    y1, y2 = (-D * dx + y_pm) / dr**2, (-D * dx - y_pm) / dr**2
-    return Vector2(x1, y1), Vector2(x2, y2)
+class Path:
+    def __init__(self):
+        pass
+
+    def calc_goal(self, pose: Pose,
+                  lookahead_radius: float,
+                  unpassed_waypoints: List[Vector2]) -> Tuple[Vector2, float]:
+        pass
 
 
-def curvature(pose: Pose, path: List[Vector2], lookahead: float) -> Tuple[float, Vector2, List[LineSegment]]:
-    # Get lookahead point
-    path_lines = []
-    for k in range(len(path) - 1):
-        path_lines += [LineSegment(path[k], path[k + 1])]
-    # For each line if the projected distance is less than lookahead, find points on that line that match lookahead distance
-    possible_points = []
-    for line in path_lines:
-        project = line.projected_point(pose)
-        dist = project.distance(pose)
-        if dist <= lookahead:
-            t = line.invert(project)
-            d = (lookahead**2 - dist**2)**0.5
-            if line.in_segment(t + d):
-                candidate = line.r(t + d)
-                possible_points += [candidate]
-    # Find the closest point to the end of the path
-    if len(possible_points) == 0:
-        goal = path[-1]
-    else: # Get closest of candidate points to goal
-        goal = sorted(possible_points, key=lambda x: x.distance(path[-1]))[0]
-    curv = -2 * goal.translated(pose).y / lookahead ** 2
-    return curv, goal, path_lines
+class LinePath(Path):
+    """
+    Represents a path made of line segments, built between waypoints
+    """
+    def __init__(self, waypoints: List[Vector2]):
+        super().__init__()
+        self.path = []
+        self.end_point = waypoints[-1]
+
+        # Build a path of segments
+        for k in range(len(waypoints) - 1):
+            self.path += [LineSegment(waypoints[k], waypoints[k + 1])]
+
+    @staticmethod
+    def calc_intersect(point_on_line: Vector2, line: LineSegment, dist: float, lookahead: float) \
+            -> Optional[Vector2]:
+        """
+        Calculate the intersect point of the lookahead circle with the given line, if one exists
+        :param point_on_line:
+        :param line:
+        :param dist:
+        :param lookahead:
+        :return: The intersection point of the lookahead circle
+        """
+        if dist > lookahead:
+            return None
+        t = line.invert(point_on_line)
+        d = (lookahead ** 2 - dist ** 2) ** 0.5
+        if line.in_segment(t + d):
+            return line.r(t + d)
+        return None
+
+    def calc_goal(self, pose: Pose,
+                  lookahead_radius: float,
+                  unpassed_waypoints: List[Vector2]) -> Tuple[Vector2, float]:
+        """
+        Calculate the goal point in order to calculate curvature
+        This takes whichever of these is first:
+        1. The end point of the path, if we have passed all the waypoints and are nearer than the lookahead distance
+        2. The point on the path that intersects with the lookahead circle (checking line segments in order)
+        3. The closest point on the path
+
+        :param pose:
+        :param lookahead_radius:
+        :param unpassed_waypoints:
+        :return: The goal and the distance to the goal
+        """
+        project_points = []
+        goal = None
+        error = 0
+
+        if len(unpassed_waypoints) <= 1:
+            end_err = pose.distance(self.end_point)
+            if end_err < lookahead_radius:
+                return self.end_point, error
+
+        # Project the robot's pose onto each line to find the closest line to the robot
+        # If we can't find a point that intersects the lookahead circle, use the closest point
+        for line in self.path:
+            project = line.projected_point(pose)
+
+            dist = project.distance(pose)
+            project_points += [(project, dist)]
+            if goal is None:
+                goal = self.calc_intersect(project, line, dist, lookahead_radius)
+                error = dist
+        # Choose the closest point
+        if goal is None:
+            project_points = sorted(project_points, key=lambda x: x[1])
+            goal, error = project_points[0]
+        return goal, error
+
+
+class PurePursuitController:
+    def __init__(self, pose: Pose, waypoints: List[Vector2], lookahead_base: float):
+        self.pose = pose
+        self.lookahead_base = lookahead_base
+        self.path = LinePath(waypoints)
+        self.unpassed_waypoints = waypoints[:]
+        self.end_point = waypoints[-1]
+
+    def lookahead(self, speed: float) -> float:
+        """
+        Calculate the lookahead distance based on the robot speed
+        :param speed: Robot speed, from 0.0 to 1.0 as a percent of the max speed
+        :return: Radius of the lookahead circle
+        """
+        return self.lookahead_base
+
+    def curvature(self, pose: Pose, speed: float) -> Tuple[float, Vector2, List[LineSegment]]:
+        """
+        Calculate the curvature of the arc needed to continue following the path
+        curvature is 1/(radius of turn)
+        :param pose: The robot's pose
+        :param speed: The speed of the robot, from 0.0 to 1.0 as a percent of max speed
+        :return: The curvature, the goal point, and the path
+        """
+        lookahead_radius = self.lookahead(speed)
+
+        # We're probably only going to pass one waypoint per loop (or have multiple chances to "pass" a waypoint)
+        # We need to keep track of the waypoints so we know when we can go to the end
+        for point in self.unpassed_waypoints:
+            if pose.distance(point) < lookahead_radius:
+                self.unpassed_waypoints.remove(point)
+                break
+
+        goal, dist = self.path.calc_goal(pose, lookahead_radius, self.unpassed_waypoints)
+        try:
+            curv = -2 * goal.translated(pose).y / dist ** 2
+        except ZeroDivisionError:
+            curv = 0
+        return curv, goal, self.path.path
+
+    def is_at_end(self, pose, dist_margin=1/12):
+        """
+        See if the robot has completed its path
+        :param pose: The robot pose
+        :return: True if we have gone around the path and are near the end
+        """
+        return len(self.unpassed_waypoints) == 0 and pose.distance(self.end_point) < dist_margin
