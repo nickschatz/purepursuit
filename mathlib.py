@@ -1,8 +1,6 @@
 import math
-from typing import Union, List
+from typing import Union, List, Tuple
 import numpy as np
-
-import pursuit
 
 
 class Vector2:
@@ -51,7 +49,7 @@ class Vector2:
         return Vector2(self.x - other.x, self.y - other.y)
 
     def __add__(self, other):
-        assert type(other) == Vector2 or type(other) == pursuit.Pose
+        assert type(other) == Vector2
         return Vector2(self.x + other.x, self.y + other.y)
 
     def __abs__(self):
@@ -118,36 +116,251 @@ class LineSegment:
         return "Line(t<{}, {}> + <{}, {}>".format(self.slope.x, self.slope.y, self.intersect.x, self.intersect.y)
 
 
-class CubicSpline:
-    def __init__(self, waypoints: List[pursuit.Pose]):
-        assert len(waypoints) >= 3
-        self.curves = []
+class Polynomial:
+    def __init__(self):
+        pass
 
-        for n in range(len(waypoints) - 2):
+    def compute(self, x: float) -> float:
+        raise NotImplementedError
+
+    def slope(self, x: float) -> float:
+        raise NotImplementedError
+
+    def curvature(self, x: float) -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_row(x: float) -> List[float]:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_slope_row(x: float) -> List[float]:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_curvature_row(x: float) -> List[float]:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_system(x0, y0, x1, y1, t0, t1, k0, k1) -> Tuple[np.mat, np.mat]:
+        raise NotImplementedError
+
+    def length(self, x0: float, x1: float) -> float:
+        accum = 0
+        dx = 0.001
+        x = float(x0)
+        while x < x1:
+            slope = float(self.slope(x))
+            accum += (1 + slope**2)**(1/2) * dx
+            x += dx
+        return accum
+
+
+class QuarticPolynomial(Polynomial):
+    def __init__(self, A, B, C, D, E):
+        super().__init__()
+        self.A = A
+        self.B = B
+        self.C = C
+        self.D = D
+        self.E = E
+
+    def compute(self, x) -> float:
+        return self.A * x**4 + \
+               self.B * x**3 + \
+               self.C * x**2 + \
+               self.D * x**1 + \
+               self.E
+
+    def slope(self, x) -> float:
+        return 4 * self.A * x**3 + \
+               3 * self.B * x**2 + \
+               2 * self.C * x**1 + \
+               self.D
+
+    def curvature(self, x) -> float:
+        return 12 * self.A * x**2 + 6 * self.B * x + 2 * self.C
+
+    @staticmethod
+    def get_row(x: float) -> List[float]:
+        return [x**4, x**3, x**2, x**1, x**0]
+
+    @staticmethod
+    def get_slope_row(x: float) -> List[float]:
+        return [4 * x ** 3, 3 * x ** 2, 2 * x ** 1, x ** 0, 0]
+
+    @staticmethod
+    def get_curvature_row(x: float) -> List[float]:
+        return [12 * x ** 2, 6 * x ** 1, 2 * x ** 0, 0, 0]
+
+    @staticmethod
+    def get_system(x0, y0, x1, y1, t0, t1, k0, k1):
+        return np.mat([QuarticPolynomial.get_row(x0),
+                       QuarticPolynomial.get_row(x1),
+                       QuarticPolynomial.get_slope_row(x0),
+                       QuarticPolynomial.get_slope_row(x1),
+                       QuarticPolynomial.get_curvature_row(x0),
+                       ]), np.mat([[y0], [y1], [t0], [t1], [k0]])
+
+    def __str__(self):
+        return f"Quartic {self.A} {self.B} {self.C} {self.D} {self.E}"
+
+
+class QuinticPolynomial(Polynomial):
+    def __init__(self, A, B, C, D, E, F):
+        super().__init__()
+        self.A = A
+        self.B = B
+        self.C = C
+        self.D = D
+        self.E = E
+        self.F = F
+
+    def compute(self, x):
+        return self.A * x ** 5 + \
+               self.B * x ** 4 + \
+               self.C * x ** 3 + \
+               self.D * x ** 2 + \
+               self.E * x ** 1 + \
+               self.F
+
+    def slope(self, x):
+        return 5 * self.A * x ** 4 + \
+               4 * self.B * x ** 3 + \
+               3 * self.C * x ** 2 + \
+               2 * self.D * x ** 1 + \
+               self.E
+
+    def curvature(self, x) :
+        return 20 * self.A * x**3 + 12 * self.B * x**2 + 6 * self.C * x + self.D
+
+    @staticmethod
+    def get_row(x: float) -> List[float]:
+        return [x ** 5, x ** 4, x ** 3, x ** 2, x ** 1, x ** 0]
+
+    @staticmethod
+    def get_slope_row(x: float) -> List[float]:
+        return [5 * x ** 4, 4 * x ** 3, 3 * x ** 2, 2 * x ** 1, x ** 0, 0]
+
+    @staticmethod
+    def get_curvature_row(x: float) -> List[float]:
+        return [20 * x **3, 12 * x ** 2, 6 * x ** 1, 2 * x ** 0, 0, 0]
+
+    @staticmethod
+    def get_system(x0, y0, x1, y1, t0, t1, k0, k1) -> Tuple[np.mat, np.mat]:
+        return np.mat([QuinticPolynomial.get_row(x0),
+                       QuinticPolynomial.get_row(x1),
+                       QuinticPolynomial.get_slope_row(x0),
+                       QuinticPolynomial.get_slope_row(x1),
+                       QuinticPolynomial.get_curvature_row(x0),
+                       QuinticPolynomial.get_curvature_row(x1),
+                       ]), np.mat([[y0], [y1], [t0], [t1], [k0], [k1]])
+
+    def __str__(self):
+        return f"Quintic {self.A} {self.B} {self.C} {self.D} {self.E} {self.F}"
+
+
+def polynomial_from_parameters(parameters: np.ndarray) -> Polynomial:
+    parameters = list(parameters.flatten().tolist())[0]  # ew ew ew
+    if len(parameters) == 5:
+        return QuarticPolynomial(parameters[0], parameters[1], parameters[2], parameters[3], parameters[4])
+    elif len(parameters) == 6:
+        return QuinticPolynomial(parameters[0], parameters[1], parameters[2], parameters[3], parameters[4],
+                                 parameters[5])
+    else:
+        raise ValueError("Only quintic and quartic polynomials expected")
+
+
+class SplinePart:
+    def __init__(self, P: Polynomial, x0: float, x1: float, t_begin: float, t_end: float):
+        self.curve = P
+        self.begin_x = x0
+        self.end_x = x1
+        self.length = P.length(x0, x1)
+        self.t_begin = t_begin
+        self.t_end = t_end
+
+    def get_x(self, t) -> float:
+        return self.begin_x + (self.end_x - self.begin_x) * (t - self.t_begin) / (self.t_end - self.t_begin)
+
+    def compute(self, t: float) -> float:
+        return self.curve.compute(self.get_x(t))
+
+    def slope(self, t: float) -> float:
+        return self.curve.slope(self.get_x(t))
+
+    def curvature(self, t: float) -> float:
+        return self.curve.curvature(self.get_x(t))
+
+
+class ComboSpline:
+    def __init__(self, waypoints: List):
+        assert len(waypoints) >= 2
+
+        self.waypoints = waypoints[:]
+
+        lengths = []
+        curves = []
+
+        for n in range(len(waypoints) - 1):
             waypoint = waypoints[n]
             next_waypoint = waypoints[n+1]
-            # Last polynomial, needs to be quintic
-            if n+1 == len(waypoints) - 1:
-                pass
+            quintic_flag = n+1 == len(waypoints) - 1
+            spline_type = QuinticPolynomial if quintic_flag else QuarticPolynomial
+
+            # First waypoint has zero curvature to begin
+            if n == 0:
+                k0 = 0
             else:
-                # First waypoint has zero curvature to begin
-                if n == 0:
-                    k0 = 0
-                else:
-                    k0 = self.curves[-1].end_curvature()
-                x0 = waypoint.x
-                y0 = waypoint.y
-                x1 = next_waypoint.x
-                y1 = next_waypoint.y
-                t0 = math.tan(waypoint.heading)
-                t1 = math.tan(next_waypoint.heading)
+                k0 = curves[-1].curvature(waypoint.x)
+            k1 = 0  # zero curvature at the end, only used on last spline
 
-                A = np.mat([[x0**4, x0**3, x0**2, x0, 1],
-                            [x1 ** 4, x1 ** 3, x1 ** 2, x1, 1],
-                            [4 * x0**3, 3 * x0**2, 2 * x0, 1, 0],
-                            [4 * x1**3, 3 * x1**2, 2 * x1, 1, 0],
-                            [12 * x0**2, 6 * x0, 2, 0, 0]])
-                b = np.mat([[y0], [y1], [t0], [t1], [k0]])
-                curve_constants = np.
+            x0 = waypoint.x
+            y0 = waypoint.y
+            x1 = next_waypoint.x
+            y1 = next_waypoint.y
+            t0 = math.tan(waypoint.heading)
+            t1 = math.tan(next_waypoint.heading)
 
+            cap_tangent = 1e2
+            if abs(t0) > cap_tangent:
+                print(f"Large angle at knot {n}")
+                t0 = math.copysign(cap_tangent, t0)
+            if abs(t1) > cap_tangent:
+                t1 = math.copysign(cap_tangent, t1)
+                print(f"Large angle at knot {n+1}")
 
+            A, b = spline_type.get_system(x0, y0, x1, y1, t0, t1, k0, k1)
+            curve_constants = np.linalg.solve(A, b)
+            P = polynomial_from_parameters(curve_constants)
+            curves.append(P)
+            lengths.append(P.length(waypoint.x, next_waypoint.x))
+
+        sum_lengths = sum(lengths)
+        for i in range(len(lengths)):
+            lengths[i] /= sum_lengths
+
+        self.parts = []
+        t_accum = 0
+        for i in range(len(curves)):
+            wp = waypoints[i]
+            n_wp = waypoints[i + 1]
+            x0 = wp.x
+            x1 = n_wp.x
+            t_begin = t_accum
+            t_end = t_accum + lengths[i]
+            t_accum = t_end
+            part = SplinePart(curves[i], x0, x1, t_begin, t_end)
+            assert abs(part.get_x(t_begin) - x0) < 0.001
+            assert part.get_x(t_end) == x1
+
+            self.parts.append(part)
+
+    def get_point(self, t: float):
+        assert 0 <= t <= 1
+        for part in self.parts:
+            if part.t_begin <= t <= part.t_end:
+                return Vector2(part.get_x(t), part.compute(t))
+        else:
+            part = self.parts[-1]
+            return Vector2(part.get_x(t), part.compute(t))
