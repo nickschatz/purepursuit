@@ -26,6 +26,13 @@ class Path:
         pass
 
 
+class SplinePath(Path):
+    def __init__(self, waypoints: List[Vector2], begin_angle: float, end_angle: float):
+        super().__init__()
+        self.waypoints = waypoints
+
+
+
 class LinePath(Path):
     """
     Represents a path made of line segments, built between waypoints
@@ -40,7 +47,7 @@ class LinePath(Path):
             self.path += [LineSegment(waypoints[k], waypoints[k + 1])]
 
     @staticmethod
-    def calc_intersect(point_on_line: Vector2, line: LineSegment, dist: float, lookahead: float) \
+    def calc_intersect(point_on_line: Vector2, line: LineSegment, dist: float, lookahead: float, limit_segment=True) \
             -> Optional[Vector2]:
         """
         Calculate the intersect point of the lookahead circle with the given line, if one exists
@@ -54,7 +61,7 @@ class LinePath(Path):
             return None
         t = line.invert(point_on_line)
         d = (lookahead ** 2 - dist ** 2) ** 0.5
-        if line.in_segment(t + d):
+        if line.in_segment(t + d) or not limit_segment:
             return line.r(t + d)
         return None
 
@@ -64,9 +71,10 @@ class LinePath(Path):
         """
         Calculate the goal point in order to calculate curvature
         This takes whichever of these is first:
-        1. The end point of the path, if we have passed all the waypoints and are nearer than the lookahead distance
-        2. The point on the path that intersects with the lookahead circle (checking line segments in order)
-        3. The closest point on the path
+        1. The point on the path that intersects with the lookahead circle (checking line segments in order)
+        2. The closest point on the path
+
+        If we are approaching the goal, the controller extends the line further past the goal.
 
         :param pose:
         :param lookahead_radius:
@@ -75,12 +83,7 @@ class LinePath(Path):
         """
         project_points = []
         goal = None
-        error = 0
-
-        if len(unpassed_waypoints) <= 1:
-            end_err = pose.distance(self.end_point)
-            if end_err < lookahead_radius:
-                return self.end_point, error
+        error = None
 
         # Project the robot's pose onto each line to find the closest line to the robot
         # If we can't find a point that intersects the lookahead circle, use the closest point
@@ -90,7 +93,8 @@ class LinePath(Path):
             dist = project.distance(pose)
             project_points += [(project, dist)]
             if goal is None:
-                goal = self.calc_intersect(project, line, dist, lookahead_radius)
+                is_last_line = line == self.path[-1]
+                goal = self.calc_intersect(project, line, dist, lookahead_radius, limit_segment=(not is_last_line))
                 error = dist
         # Choose the closest point
         if goal is None:
@@ -104,6 +108,7 @@ class PurePursuitController:
         self.pose = pose
         self.lookahead_base = lookahead_base
         self.path = LinePath(waypoints)
+        self.waypoints = waypoints
         self.unpassed_waypoints = waypoints[:]
         self.end_point = waypoints[-1]
 
@@ -121,7 +126,7 @@ class PurePursuitController:
         curvature is 1/(radius of turn)
         :param pose: The robot's pose
         :param speed: The speed of the robot, from 0.0 to 1.0 as a percent of max speed
-        :return: The curvature, the goal point, and the path
+        :return: The curvature of the path and the cross track error
         """
         lookahead_radius = self.lookahead(speed)
 
@@ -139,10 +144,15 @@ class PurePursuitController:
             curv = 0
         return curv, goal, self.path.path
 
-    def is_at_end(self, pose, dist_margin=1/12):
+    def is_approaching_end(self, pose):
+        return len(self.unpassed_waypoints) == 0
+
+    def is_at_end(self, pose, dist_margin=3/12):
         """
         See if the robot has completed its path
         :param pose: The robot pose
         :return: True if we have gone around the path and are near the end
         """
-        return len(self.unpassed_waypoints) == 0 and pose.distance(self.end_point) < dist_margin
+        translated_end = self.end_point.translated(pose)
+        err = abs(translated_end.x)
+        return self.is_approaching_end(pose) and translated_end.x < 0

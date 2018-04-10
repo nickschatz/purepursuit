@@ -24,7 +24,7 @@ if __name__ == '__main__':
     acc = 10
     hopper_x = -2.47 + width / 2 - width
     hopper_y = 6 + 6.5/12 + width / 2
-    path = [Vector2(0, 0), Vector2(5, 0), Vector2(0, 5), Vector2(5, 10)]
+    path = [Vector2(0, 0), Vector2(5, 0), Vector2(5, 5), Vector2(10, 10)]
     pose = Pose(0, 0, 0 * math.pi/4)
     speed = max_speed
 
@@ -40,11 +40,11 @@ if __name__ == '__main__':
         current_time += dt
         if current_time >= 10:
             break
-        try:
-            curve, target, lines = pursuit.curvature(pose, speed)
-        except ValueError:
-            print("Break")
-            break
+        #try:
+        curve, target, lines = pursuit.curvature(pose, speed)
+        #except ValueError:
+        #    print("Break")
+        #    break
         if curve == 0:
             left_speed = right_speed = speed
         else:

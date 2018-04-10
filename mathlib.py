@@ -1,5 +1,5 @@
 import math
-from typing import Union
+from typing import Union, List
 import numpy as np
 
 import pursuit
@@ -100,8 +100,6 @@ class LineSegment:
         return (tr_point.x / self.slope.x + tr_point.y / self.slope.y) / 2
 
     def r(self, t):
-        if t > self.max_t or t < 0:
-            raise ValueError("t outside range")
         return self.intersect + self.slope * t
 
     def on_line(self, point: Vector2, epsilon=1e-3):
@@ -118,3 +116,38 @@ class LineSegment:
 
     def __repr__(self):
         return "Line(t<{}, {}> + <{}, {}>".format(self.slope.x, self.slope.y, self.intersect.x, self.intersect.y)
+
+
+class CubicSpline:
+    def __init__(self, waypoints: List[pursuit.Pose]):
+        assert len(waypoints) >= 3
+        self.curves = []
+
+        for n in range(len(waypoints) - 2):
+            waypoint = waypoints[n]
+            next_waypoint = waypoints[n+1]
+            # Last polynomial, needs to be quintic
+            if n+1 == len(waypoints) - 1:
+                pass
+            else:
+                # First waypoint has zero curvature to begin
+                if n == 0:
+                    k0 = 0
+                else:
+                    k0 = self.curves[-1].end_curvature()
+                x0 = waypoint.x
+                y0 = waypoint.y
+                x1 = next_waypoint.x
+                y1 = next_waypoint.y
+                t0 = math.tan(waypoint.heading)
+                t1 = math.tan(next_waypoint.heading)
+
+                A = np.mat([[x0**4, x0**3, x0**2, x0, 1],
+                            [x1 ** 4, x1 ** 3, x1 ** 2, x1, 1],
+                            [4 * x0**3, 3 * x0**2, 2 * x0, 1, 0],
+                            [4 * x1**3, 3 * x1**2, 2 * x1, 1, 0],
+                            [12 * x0**2, 6 * x0, 2, 0, 0]])
+                b = np.mat([[y0], [y1], [t0], [t1], [k0]])
+                curve_constants = np.
+
+
