@@ -24,27 +24,33 @@ if __name__ == '__main__':
     acc = 10
     hopper_x = -2.47 + width / 2 - width
     hopper_y = 6 + 6.5/12 + width / 2
-    path = [Vector2(0, 0), Vector2(5, 0), Vector2(5, 5), Vector2(10, 10)]
+    path = [Pose(0, 0, 0 * math.pi / 4),
+            Pose(10, 10, 0 * math.pi/4),
+            Pose(15, 5, -1 * math.pi/4),
+            Pose(20, -10, -1 * math.pi/4)]
     pose = Pose(0, 0, 0 * math.pi/4)
     speed = max_speed
 
     lookahead = 1
     dt = 1/1000
+    controller_ms = 1000/100
     current_time = 0
-    lines = []
+    loop_ct = 0
+    spline = None
 
     pursuit = PurePursuitController(pose, path, lookahead)
+    print("Done with spline")
 
+
+    curve = 0
     start = time.perf_counter()
     while not pursuit.is_at_end(pose):
-        current_time += dt
+
         if current_time >= 10:
             break
         #try:
-        curve, target, lines = pursuit.curvature(pose, speed)
-        #except ValueError:
-        #    print("Break")
-        #    break
+        if loop_ct % controller_ms == 0:
+            curve, target, spline = pursuit.curvature(pose, speed)
         if curve == 0:
             left_speed = right_speed = speed
         else:
@@ -75,16 +81,26 @@ if __name__ == '__main__':
         travel_y += [pose.y]
         distance += [pose.distance(path[-1])]
         times += [current_time]
+        current_time += dt
+        loop_ct += 1
     elapsed_realtime = time.perf_counter() - start
     print("Simulated {} seconds in {} real seconds".format(current_time, elapsed_realtime))
     plot.figure(2)
-    for line in lines:
-        line.plot(plot)
+
+    xs = []
+    ys = []
+    for t in range(1000):
+        pt = spline.get_point(t / 1000)
+        xs += [pt.x]
+        ys += [pt.y]
+    plot.plot(xs, ys)
+
     plot.plot(travel_x, travel_y)
     # plot.plot(target_x, target_y)
 
     for wp in path:
         plot.plot(wp.x, wp.y, 'bo')
+
     plot.show()
 
 

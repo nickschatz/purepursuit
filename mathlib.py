@@ -29,7 +29,10 @@ class Vector2:
         return Vector2(dxp + pose.x, dyp + pose.y)
 
     def distance(self, point):
-        return ((point.x - self.x)**2 + (point.y - self.y)**2)**0.5
+        return self.sq_dist(point)**0.5
+
+    def sq_dist(self, point):
+        return (point.x - self.x) ** 2 + (point.y - self.y) ** 2
 
     def normalized(self):
         magn = abs(self)
@@ -116,6 +119,13 @@ class LineSegment:
         return "Line(t<{}, {}> + <{}, {}>".format(self.slope.x, self.slope.y, self.intersect.x, self.intersect.y)
 
 
+def approximate_curve(x0, y0, xs, s, k):
+    M = np.mat([[x0 ** 2, x0, 1], [2 * xs, 1, 0], [2, 0, 0]])
+    b = np.mat([[y0], [s], [k]])
+    coeff = np.linalg.solve(M, b)
+    return polynomial_from_parameters(coeff)
+
+
 class Polynomial:
     def __init__(self):
         pass
@@ -126,7 +136,7 @@ class Polynomial:
     def slope(self, x: float) -> float:
         raise NotImplementedError
 
-    def curvature(self, x: float) -> float:
+    def second_deriv(self, x: float) -> float:
         raise NotImplementedError
 
     @staticmethod
@@ -155,6 +165,44 @@ class Polynomial:
             x += dx
         return accum
 
+    def get_local_quadratic_approximation(self, x: float):
+        return approximate_curve(x, self.compute(x), x, self.slope(x), self.second_deriv(x))
+
+
+class QuadraticPolynomial(Polynomial):
+    def __init__(self, A, B, C):
+        super().__init__()
+        self.A = A
+        self.B = B
+        self.C = C
+
+    def compute(self, x) -> float:
+        return self.A * x**2 + \
+               self.B * x**1 + \
+               self.C
+
+    def slope(self, x) -> float:
+        return 2 * self.A * x**1 + \
+               self.B
+
+    def second_deriv(self, x) -> float:
+        return 2 * self.A
+
+    @staticmethod
+    def get_row(x: float) -> List[float]:
+        return [x**2, x**1, x**0]
+
+    @staticmethod
+    def get_slope_row(x: float) -> List[float]:
+        return [2 * x ** 1, x ** 0, 0]
+
+    @staticmethod
+    def get_curvature_row(x: float) -> List[float]:
+        return [2 * x ** 0, 0, 0]
+
+    def __str__(self):
+        return f"Quadratic {self.A} {self.B} {self.C}"
+
 
 class QuarticPolynomial(Polynomial):
     def __init__(self, A, B, C, D, E):
@@ -178,8 +226,11 @@ class QuarticPolynomial(Polynomial):
                2 * self.C * x**1 + \
                self.D
 
-    def curvature(self, x) -> float:
+    def second_deriv(self, x) -> float:
         return 12 * self.A * x**2 + 6 * self.B * x + 2 * self.C
+
+    def curvature(self, x):
+        return self.second_deriv(x) / (1 + self.slope(x)**2)**(3/2)
 
     @staticmethod
     def get_row(x: float) -> List[float]:
@@ -231,7 +282,7 @@ class QuinticPolynomial(Polynomial):
                2 * self.D * x ** 1 + \
                self.E
 
-    def curvature(self, x) :
+    def second_deriv(self, x) :
         return 20 * self.A * x**3 + 12 * self.B * x**2 + 6 * self.C * x + self.D
 
     @staticmethod
@@ -262,13 +313,15 @@ class QuinticPolynomial(Polynomial):
 
 def polynomial_from_parameters(parameters: np.ndarray) -> Polynomial:
     parameters = list(parameters.flatten().tolist())[0]  # ew ew ew
-    if len(parameters) == 5:
+    if len(parameters) == 3:
+        return QuadraticPolynomial(parameters[0], parameters[1], parameters[2])
+    elif len(parameters) == 5:
         return QuarticPolynomial(parameters[0], parameters[1], parameters[2], parameters[3], parameters[4])
     elif len(parameters) == 6:
         return QuinticPolynomial(parameters[0], parameters[1], parameters[2], parameters[3], parameters[4],
                                  parameters[5])
     else:
-        raise ValueError("Only quintic and quartic polynomials expected")
+        raise ValueError("Only quadratic, quintic and quartic polynomials expected")
 
 
 class SplinePart:
@@ -290,7 +343,7 @@ class SplinePart:
         return self.curve.slope(self.get_x(t))
 
     def curvature(self, t: float) -> float:
-        return self.curve.curvature(self.get_x(t))
+        return self.curve.second_deriv(self.get_x(t))
 
 
 class ComboSpline:
@@ -312,7 +365,7 @@ class ComboSpline:
             if n == 0:
                 k0 = 0
             else:
-                k0 = curves[-1].curvature(waypoint.x)
+                k0 = curves[-1].second_deriv(waypoint.x)
             k1 = 0  # zero curvature at the end, only used on last spline
 
             x0 = waypoint.x
@@ -324,11 +377,11 @@ class ComboSpline:
 
             cap_tangent = 1e2
             if abs(t0) > cap_tangent:
-                print(f"Large angle at knot {n}")
+                print(f"Capping large angle at knot {n}")
                 t0 = math.copysign(cap_tangent, t0)
             if abs(t1) > cap_tangent:
                 t1 = math.copysign(cap_tangent, t1)
-                print(f"Large angle at knot {n+1}")
+                print(f"Capping large angle at knot {n+1}")
 
             A, b = spline_type.get_system(x0, y0, x1, y1, t0, t1, k0, k1)
             curve_constants = np.linalg.solve(A, b)
@@ -336,9 +389,9 @@ class ComboSpline:
             curves.append(P)
             lengths.append(P.length(waypoint.x, next_waypoint.x))
 
-        sum_lengths = sum(lengths)
+        self.length = sum(lengths)
         for i in range(len(lengths)):
-            lengths[i] /= sum_lengths
+            lengths[i] /= self.length
 
         self.parts = []
         t_accum = 0
@@ -356,11 +409,29 @@ class ComboSpline:
 
             self.parts.append(part)
 
-    def get_point(self, t: float):
-        assert 0 <= t <= 1
+    def get_part(self, t: float):
         for part in self.parts:
             if part.t_begin <= t <= part.t_end:
-                return Vector2(part.get_x(t), part.compute(t))
+                _part = part
+                break
         else:
-            part = self.parts[-1]
-            return Vector2(part.get_x(t), part.compute(t))
+            _part = self.parts[-1]
+        return _part
+
+    def get_point(self, t: float):
+        # assert 0 <= t <= 1
+        _part = self.get_part(t)
+        return Vector2(_part.get_x(t), _part.compute(t))
+
+    def get_unit_tangent_vector(self, t: float):
+        _part = self.get_part(t)
+        return Vector2(1, _part.slope(t)).normalized()
+
+
+def minimize_diff(P1: QuadraticPolynomial, P2: QuadraticPolynomial):
+    minimize = QuadraticPolynomial(abs(P1.A - P2.A), abs(P1.B - P2.B), abs(P1.C - P2.C))
+    if minimize.A == 0:
+        raise ValueError("Polynomials are the same")
+    x = minimize.B / (2 * minimize.A)
+    return x
+
