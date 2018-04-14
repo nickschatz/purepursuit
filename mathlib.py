@@ -419,9 +419,15 @@ class ComboSpline:
         return _part
 
     def get_point(self, t: float):
-        # assert 0 <= t <= 1
+        if t > 1:
+            return self.get_point(1) + Vector2(t/self.length, t*self.get_slope(1) / self.length)
         _part = self.get_part(t)
         return Vector2(_part.get_x(t), _part.compute(t))
+
+    def get_slope(self, t: float):
+        # assert 0 <= t <= 1
+        _part = self.get_part(t)
+        return _part.slope(t)
 
     def get_unit_tangent_vector(self, t: float):
         _part = self.get_part(t)

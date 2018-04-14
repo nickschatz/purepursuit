@@ -24,10 +24,10 @@ if __name__ == '__main__':
     acc = 10
     hopper_x = -2.47 + width / 2 - width
     hopper_y = 6 + 6.5/12 + width / 2
-    path = [Pose(0, 0, 0 * math.pi / 4),
-            Pose(10, 10, 0 * math.pi/4),
-            Pose(15, 5, -1 * math.pi/4),
-            Pose(20, -10, -1 * math.pi/4)]
+    path = [Pose(x=1.5, y=-10.0, heading=0.0),
+            Pose(x=19.0, y=-7.0, heading=0.7853981633974483),
+            Pose(x=21.0, y=7.0, heading=1.3962634015954636),
+            Pose(x=24.0, y=7.0, heading=-0.3490658503988659)]
     pose = Pose(0, 0, 0 * math.pi/4)
     speed = max_speed
 
