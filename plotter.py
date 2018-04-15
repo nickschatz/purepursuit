@@ -2,7 +2,7 @@ import math
 import matplotlib.pylab as plot
 import time
 
-from pursuit import Pose, PurePursuitController
+from pursuit import Pose, PurePursuitController, InterpolationStrategy
 from mathlib import Vector2
 
 
@@ -25,9 +25,11 @@ if __name__ == '__main__':
     hopper_x = -2.47 + width / 2 - width
     hopper_y = 6 + 6.5/12 + width / 2
     path = [Pose(x=1.5, y=-10.0, heading=0.0),
-            Pose(x=19.0, y=-7.0, heading=0.7853981633974483),
-            Pose(x=21.0, y=7.0, heading=1.3962634015954636),
-            Pose(x=24.0, y=7.0, heading=-0.3490658503988659)]
+            Pose(x=17.0, y=-10.0, heading=0.0),
+            Pose(x=19.5, y=-8.0, heading=0.7853981633974483),
+            Pose(x=19.6, y=3.0, heading=1.4835298641951802),
+            Pose(x=21.0, y=7.0, heading=0.0),
+            Pose(x=24.0, y=7.0, heading=-0.5235987755982988)]
     pose = Pose(0, 0, 0 * math.pi/4)
     speed = max_speed
 
@@ -38,7 +40,7 @@ if __name__ == '__main__':
     loop_ct = 0
     spline = None
 
-    pursuit = PurePursuitController(pose, path, lookahead)
+    pursuit = PurePursuitController(pose, path, InterpolationStrategy.CUBIC, lookahead)
     print("Done with spline")
 
 

@@ -19,10 +19,17 @@ class Path:
 
 
 class SplinePath(Path):
-    def __init__(self, waypoints: List[Pose]):
+    def __init__(self, waypoints: List[Pose], interpolation_strategy: int):
         super().__init__()
         self.path = waypoints[:]
-        self.spline = ComboSpline(self.path)
+        if interpolation_strategy == InterpolationStrategy.COMBO4_5:
+            self.spline = ComboSpline(self.path)
+        elif interpolation_strategy == InterpolationStrategy.CUBIC:
+            self.spline = mathlib.CubicSpline(self.path)
+        elif interpolation_strategy == InterpolationStrategy.LINEAR:
+            raise NotImplementedError
+        else:
+            raise ValueError(f"Invalid interpolation strategy {interpolation_strategy}")
 
     def calc_goal(self, pose: Pose,
                   lookahead_radius: float):
@@ -119,11 +126,17 @@ class LinePath(Path):
         return goal, error
 
 
+class InterpolationStrategy:
+    LINEAR = 0
+    CUBIC = 1
+    COMBO4_5 = 2
+
+
 class PurePursuitController:
-    def __init__(self, pose: Pose, waypoints: List[Pose], lookahead_base: float):
+    def __init__(self, pose: Pose, waypoints: List[Pose], interpol_strategy: int, lookahead_base: float):
         self.pose = pose
         self.lookahead_base = lookahead_base
-        self.path = SplinePath(waypoints)
+        self.path = SplinePath(waypoints, interpol_strategy)
         self.waypoints = waypoints
         self.unpassed_waypoints = waypoints[:]
         self.end_point = waypoints[-1]
@@ -136,7 +149,7 @@ class PurePursuitController:
         """
         return self.lookahead_base
 
-    def curvature(self, pose: Pose, speed: float) -> Tuple[float, Vector2, ComboSpline]:
+    def curvature(self, pose: Pose, speed: float) -> Tuple[float, Vector2, mathlib.Spline]:
         """
         Calculate the curvature of the arc needed to continue following the path
         curvature is 1/(radius of turn)
