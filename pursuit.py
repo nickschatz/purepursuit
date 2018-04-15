@@ -2,7 +2,8 @@ import math
 from typing import List, Tuple, Optional, Union, Callable
 
 import mathlib
-from mathlib import LineSegment, Vector2, ComboSpline
+from mathlib import LineSegment, Vector2
+from splines import ComboSpline, CubicSpline, Spline
 
 import copy
 
@@ -25,7 +26,7 @@ class SplinePath(Path):
         if interpolation_strategy == InterpolationStrategy.COMBO4_5:
             self.spline = ComboSpline(self.path)
         elif interpolation_strategy == InterpolationStrategy.CUBIC:
-            self.spline = mathlib.CubicSpline(self.path)
+            self.spline = CubicSpline(self.path)
         elif interpolation_strategy == InterpolationStrategy.LINEAR:
             raise NotImplementedError
         else:
@@ -149,7 +150,7 @@ class PurePursuitController:
         """
         return self.lookahead_base
 
-    def curvature(self, pose: Pose, speed: float) -> Tuple[float, Vector2, mathlib.Spline]:
+    def curvature(self, pose: Pose, speed: float) -> Tuple[float, Vector2, Spline]:
         """
         Calculate the curvature of the arc needed to continue following the path
         curvature is 1/(radius of turn)

@@ -2,7 +2,7 @@ import math
 import tkinter as tk
 from PIL import ImageTk, Image
 
-from mathlib import ComboSpline, CubicSpline
+from splines import ComboSpline, CubicSpline
 from pose import Pose
 
 
