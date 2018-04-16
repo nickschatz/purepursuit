@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional, Union, Callable
 
 import mathlib
 from mathlib import LineSegment, Vector2
-from splines import ComboSpline, CubicSpline, Spline
+from splines import ComboSpline, CubicSpline, Spline, LinearSpline
 
 import copy
 
@@ -28,7 +28,7 @@ class SplinePath(Path):
         elif interpolation_strategy == InterpolationStrategy.CUBIC:
             self.spline = CubicSpline(self.path)
         elif interpolation_strategy == InterpolationStrategy.LINEAR:
-            raise NotImplementedError
+            self.spline = LinearSpline(self.path)
         else:
             raise ValueError(f"Invalid interpolation strategy {interpolation_strategy}")
 
@@ -59,82 +59,16 @@ class SplinePath(Path):
         return pt, dist
 
 
-class LinePath(Path):
-    """
-    Represents a path made of line segments, built between waypoints
-    """
-    def __init__(self, waypoints: List[Vector2]):
-        super().__init__()
-        self.path = []
-        self.end_point = waypoints[-1]
-
-        # Build a path of segments
-        for k in range(len(waypoints) - 1):
-            self.path += [LineSegment(waypoints[k], waypoints[k + 1])]
-
-    @staticmethod
-    def calc_intersect(point_on_line: Vector2, line: LineSegment, dist: float, lookahead: float, limit_segment=True) \
-            -> Optional[Vector2]:
-        """
-        Calculate the intersect point of the lookahead circle with the given line, if one exists
-        :param point_on_line:
-        :param line:
-        :param dist:
-        :param lookahead:
-        :return: The intersection point of the lookahead circle
-        """
-        if dist > lookahead:
-            return None
-        t = line.invert(point_on_line)
-        d = (lookahead ** 2 - dist ** 2) ** 0.5
-        if line.in_segment(t + d) or not limit_segment:
-            return line.r(t + d)
-        return None
-
-    def calc_goal(self, pose: Pose,
-                  lookahead_radius: float) -> Tuple[Vector2, float]:
-        """
-        Calculate the goal point in order to calculate curvature
-        This takes whichever of these is first:
-        1. The point on the path that intersects with the lookahead circle (checking line segments in order)
-        2. The closest point on the path
-
-        If we are approaching the goal, the controller extends the line further past the goal.
-
-        :param pose:
-        :param lookahead_radius:
-        :return: The goal and the distance to the goal
-        """
-        project_points = []
-        goal = None
-        error = None
-
-        # Project the robot's pose onto each line to find the closest line to the robot
-        # If we can't find a point that intersects the lookahead circle, use the closest point
-        for line in self.path:
-            project = line.projected_point(pose)
-
-            dist = project.distance(pose)
-            project_points += [(project, dist)]
-            if goal is None:
-                is_last_line = line == self.path[-1]
-                goal = self.calc_intersect(project, line, dist, lookahead_radius, limit_segment=(not is_last_line))
-                error = dist
-        # Choose the closest point
-        if goal is None:
-            project_points = sorted(project_points, key=lambda x: x[1])
-            goal, error = project_points[0]
-        return goal, error
-
-
 class InterpolationStrategy:
     LINEAR = 0
     CUBIC = 1
-    COMBO4_5 = 2
+    QUINTIC = 2
+    COMBO4_5 = 3
 
 
 class PurePursuitController:
-    def __init__(self, pose: Pose, waypoints: List[Pose], interpol_strategy: int, lookahead_base: float):
+    def __init__(self, pose: Pose, waypoints: List[Pose], lookahead_base: float,
+                 interpol_strategy: int=InterpolationStrategy.CUBIC):
         self.pose = pose
         self.lookahead_base = lookahead_base
         self.path = SplinePath(waypoints, interpol_strategy)

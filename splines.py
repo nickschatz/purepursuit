@@ -32,7 +32,7 @@ class SplinePart:
     def _get_y(self, t: float) -> float:
         return self.curve.compute(self._get_x(t))
 
-    def _slope(self, t: float) -> float:
+    def slope(self, t: float) -> float:
         return self.curve.slope(self._get_x(t))
 
     def curvature(self, t: float) -> float:
@@ -75,6 +75,52 @@ class Spline():
         return Vector2(1, _part.slope(t)).normalized()
 
 
+class LinearSpline(Spline):
+    def __init__(self, waypoints: List[Pose]):
+        super().__init__(waypoints)
+
+    def reticulate(self):
+        curves = []
+        lengths = []
+        for n in range(len(self.waypoints) - 1):
+            waypoint = self.waypoints[n]
+            next_waypoint = self.waypoints[n + 1].translated(waypoint)
+
+            x0 = 0
+            y0 = 0
+            x1 = next_waypoint.x
+            y1 = next_waypoint.y
+
+            def get_linear_system(x0, y0, x1, y1):
+                return np.mat([Polynomial.get_row_for_degree(x0, 1),
+                               Polynomial.get_row_for_degree(x1, 1)
+                               ]), np.mat([[y0], [y1]])
+
+            A, b = get_linear_system(x0, y0, x1, y1)
+            curve_constants = np.linalg.solve(A, b)
+            P = polynomial_from_parameters(curve_constants)
+            curves.append(P)
+            lengths.append(P.length(x0, x1))
+
+        self.length = sum(lengths)
+        for i in range(len(lengths)):
+            lengths[i] /= self.length
+
+        self.parts = []
+        t_accum = 0
+        for i in range(len(curves)):
+            wp = self.waypoints[i]
+            n_wp = self.waypoints[i + 1].translated(wp)
+            x0 = 0
+            x1 = n_wp.x
+            t_begin = t_accum
+            t_end = t_accum + lengths[i]
+            t_accum = t_end
+            part = SplinePart(curves[i], x0, x1, t_begin, t_end, wp)
+
+            self.parts.append(part)
+
+
 class CubicSpline(Spline):
     def __init__(self, waypoints: List[Pose]):
         super().__init__(waypoints)
@@ -108,10 +154,6 @@ class CubicSpline(Spline):
             A, b = get_cubic_system(x0, y0, x1, y1, t0, t1)
             curve_constants = np.linalg.solve(A, b)
             P = polynomial_from_parameters(curve_constants)
-            assert P.compute(0) == 0
-            assert P.slope(0) == math.tan(0)
-            assert abs(P.compute(x1) - y1) < 1e-3
-            assert abs(P.slope(x1) - math.tan(next_waypoint.heading)) < 1e-3
             curves.append(P)
             lengths.append(P.length(x0, x1))
 
@@ -130,8 +172,6 @@ class CubicSpline(Spline):
             t_end = t_accum + lengths[i]
             t_accum = t_end
             part = SplinePart(curves[i], x0, x1, t_begin, t_end, wp)
-            assert abs(part.get_x(t_begin) - wp.x) < 1e-3
-            assert abs(part.get_y(t_begin) - wp.y) < 1e-3
 
             self.parts.append(part)
 
