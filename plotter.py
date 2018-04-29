@@ -18,6 +18,7 @@ if __name__ == '__main__':
     targetp_x = []
     targetp_y = []
     distance = []
+    lookahead_percent = []
     times = []
     width = 29.25 / 12
     max_speed = 13
@@ -25,24 +26,24 @@ if __name__ == '__main__':
     hopper_x = -2.47 + width / 2 - width
     hopper_y = 6 + 6.5/12 + width / 2
     path = [Pose(x=1.5, y=-10.0, heading=0.0),
-            Pose(x=17.0, y=-10.0, heading=0.0),
-            Pose(x=19.5, y=-8.0, heading=0.17453292519943295),
-            Pose(x=19.6, y=3.0, heading=0.7853981633974483),
-            Pose(x=21.0, y=7.0, heading=0.0),
-            Pose(x=24.0, y=7.0, heading=-0.17453292519943295)]
-    pose = Pose(0, 0, 0 * math.pi/4)
+            Pose(x=19.0, y=-7.0, heading=0.7853981633974483),
+            Pose(x=20.0, y=5.0, heading=1.5707963267948966),
+            Pose(x=20.25, y=7, heading=0.7853981633974483),
+            Pose(x=25.0, y=8.5, heading=-0.5235987755982988)]
+    pose = Pose(1.5, -10, 0 * math.pi/4)
     speed = max_speed
 
-    lookahead = 1
+    lookahead = 3.5
     dt = 1/1000
     controller_ms = 1000/100
     current_time = 0
     loop_ct = 0
     spline = None
 
-    pursuit = PurePursuitController(pose, path, lookahead, InterpolationStrategy.LINEAR)
-    print("Done with spline")
+    curvature_times = []
 
+    pursuit = PurePursuitController(pose, path, lookahead, InterpolationStrategy.CUBIC)
+    print("Done with spline")
 
     curve = 0
     start = time.perf_counter()
@@ -52,7 +53,9 @@ if __name__ == '__main__':
             break
         #try:
         if loop_ct % controller_ms == 0:
-            curve, target, spline = pursuit.curvature(pose, speed)
+            curvature_perf = time.perf_counter()
+            curve, target, spline = pursuit.curvature(pose, speed/max_speed)
+            curvature_times.append(time.perf_counter() - curvature_perf)
         if curve == 0:
             left_speed = right_speed = speed
         else:
@@ -76,6 +79,7 @@ if __name__ == '__main__':
 
         target_x += [target.x]
         target_y += [target.y]
+        lookahead_percent += [abs(target.distance(pose) - lookahead)]
         target = target.translated(pose)
         targetp_x += [target.x + pose.x]
         targetp_y += [target.y + pose.y]
@@ -86,6 +90,7 @@ if __name__ == '__main__':
         current_time += dt
         loop_ct += 1
     elapsed_realtime = time.perf_counter() - start
+    print(f"Average curvature cycle time: {sum(curvature_times)/len(curvature_times)} ms")
     print("Simulated {} seconds in {} real seconds".format(current_time, elapsed_realtime))
     plot.figure(2)
 
@@ -102,6 +107,9 @@ if __name__ == '__main__':
 
     for wp in path:
         plot.plot(wp.x, wp.y, 'bo')
+
+    plot.figure(1)
+    plot.plot(times, lookahead_percent)
 
     plot.show()
 

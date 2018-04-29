@@ -39,7 +39,7 @@ class SplinePath(Path):
         t_robot = 0
         min_dist_sq = 1e10
         # TODO better numerical method for finding close point, if necessary
-        t_granularity = int(self.spline.length * 5)
+        t_granularity = int(self.spline.length * 10)
         for t in range(t_granularity):
             t = t/t_granularity
             pt = self.spline.get_point(t)
@@ -49,14 +49,31 @@ class SplinePath(Path):
                 t_robot = t
 
         # Find intersection
-        t_guess = t_robot + lookahead_radius / self.spline.length
-        pt = self.spline.get_point(t_guess)
-        line = mathlib.LineSegment(pose, pt)
-        pt = line.r(lookahead_radius)
+        lookahead_sq = lookahead_radius**2
+        robot_pt = self.spline.get_point(t_robot)
+        last_pt = robot_pt
+        last_diff = 1e10
+        for t in range(t_granularity):
+            t = t_robot + t/t_granularity
+            guess_pt = self.spline.get_point(t)
+            sq_dist = guess_pt.sq_dist(robot_pt)
+            diff = abs(sq_dist - lookahead_sq)
+            if diff > last_diff:
+                break
+            else:
+                last_diff = diff
+                last_pt = guess_pt
+
+        pt = last_pt
+        # t_guess = t_robot + lookahead_radius / self.spline.length
+        # pt = self.spline.get_point(t_guess)
 
         dist = pt.distance(pose)
 
         return pt, dist
+
+    def length(self):
+        return self.spline.length
 
 
 class InterpolationStrategy:
@@ -82,7 +99,8 @@ class PurePursuitController:
         :param speed: Robot speed, from 0.0 to 1.0 as a percent of the max speed
         :return: Radius of the lookahead circle
         """
-        return self.lookahead_base
+        min_lookahead = 1
+        return min_lookahead + ((speed - 0.2) / 0.6) * (self.lookahead_base - min_lookahead)
 
     def curvature(self, pose: Pose, speed: float) -> Tuple[float, Vector2, Spline]:
         """

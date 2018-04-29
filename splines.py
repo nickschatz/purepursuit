@@ -12,7 +12,7 @@ class SplinePart:
         self.curve = P
         self.begin_x = x0
         self.end_x = x1
-        self.length = P.length(x0, x1)
+        self.total_arc_length = P.length(x0, x1)
         self.t_begin = t_begin
         self.t_end = t_end
         self.offset = offset
@@ -32,6 +32,9 @@ class SplinePart:
     def _get_y(self, t: float) -> float:
         return self.curve.compute(self._get_x(t))
 
+    def length(self, t: float) -> float:
+        return self.curve.length(self._get_x(self.t_begin), self._get_x(t))
+
     def slope(self, t: float) -> float:
         return self.curve.slope(self._get_x(t))
 
@@ -46,17 +49,21 @@ class Spline():
         self.length = 0
         self.parts = []
         self.reticulate()
+        self._part_map = {}
 
     def reticulate(self):
         raise NotImplementedError
 
     def get_part(self, t: float):
+        if t in self._part_map.keys():
+            return self._part_map[t]
         for part in self.parts:
             if part.t_begin <= t <= part.t_end:
                 _part = part
                 break
         else:
             _part = self.parts[-1]
+        self._part_map[t] = _part
         return _part
 
     def get_point(self, t: float):
@@ -73,6 +80,15 @@ class Spline():
     def get_unit_tangent_vector(self, t: float):
         _part = self.get_part(t)
         return Vector2(1, _part.slope(t)).normalized()
+
+    def arc_length(self, t: float) -> float:
+        length = 0
+        for part in self.parts:
+            if t >= part.t_end:
+                length += part.length
+            if part.t_end > t > part.t_begin:
+                length += part.length(part.t_begin, t)
+        return length
 
 
 class LinearSpline(Spline):
@@ -227,6 +243,69 @@ class ComboSpline(Spline):
 
             get_system = get_quintic_system if quintic_flag else get_quartic_system
             A, b = get_system(x0, y0, x1, y1, t0, t1, k0, k1)
+            curve_constants = np.linalg.solve(A, b)
+            P = polynomial_from_parameters(curve_constants)
+            curves.append(P)
+            lengths.append(P.length(0, next_waypoint.x))
+
+        self.length = sum(lengths)
+        for i in range(len(lengths)):
+            lengths[i] /= self.length
+
+        self.parts = []
+        t_accum = 0
+        for i in range(len(curves)):
+            wp = waypoints[i]
+            n_wp = waypoints[i + 1].translated(wp)
+            x0 = 0
+            x1 = n_wp.x
+            t_begin = t_accum
+            t_end = t_accum + lengths[i]
+            t_accum = t_end
+            part = SplinePart(curves[i], x0, x1, t_begin, t_end, wp)
+
+            self.parts.append(part)
+
+
+class QuinticSpline(Spline):
+    def __init__(self, waypoints: List):
+        super().__init__(waypoints)
+
+    def reticulate(self):
+        def get_quintic_system(x0, y0, x1, y1, t0, t1, k0, k1) -> Tuple[np.mat, np.mat]:
+            return np.mat([Polynomial.get_row_for_degree(x0, 5),
+                           Polynomial.get_row_for_degree(x1, 5),
+                           Polynomial.get_slope_row_for_degree(x0, 5),
+                           Polynomial.get_slope_row_for_degree(x1, 5),
+                           Polynomial.get_curvature_row_for_degree(x0, 5),
+                           Polynomial.get_curvature_row_for_degree(x1, 5),
+                           ]), np.mat([[y0], [y1], [t0], [t1], [k0], [k1]])
+
+        waypoints = self.waypoints
+        curves = []
+        lengths = []
+        for n in range(len(waypoints) - 1):
+            waypoint = waypoints[n]
+            next_waypoint = waypoints[n + 1].translated(waypoint)
+            quintic_flag = n + 1 == len(waypoints) - 1
+
+            # First waypoint has zero curvature to begin
+            k0 = 0
+            k1 = 0
+
+            x0 = 0
+            y0 = 0
+            x1 = next_waypoint.x
+            y1 = next_waypoint.y
+            t0 = math.tan(0)
+            t1 = math.tan(next_waypoint.heading)
+
+            cap_tangent = 1e2
+            if abs(t1) > cap_tangent:
+                t1 = math.copysign(cap_tangent, t1)
+                print(f"Capping large angle at knot {n+1}")
+
+            A, b = get_quintic_system(x0, y0, x1, y1, t0, t1, k0, k1)
             curve_constants = np.linalg.solve(A, b)
             P = polynomial_from_parameters(curve_constants)
             curves.append(P)

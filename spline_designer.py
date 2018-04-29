@@ -2,7 +2,7 @@ import math
 import tkinter as tk
 from PIL import ImageTk, Image
 
-from splines import ComboSpline, CubicSpline, LinearSpline
+from splines import ComboSpline, CubicSpline, LinearSpline, QuinticSpline
 from pose import Pose
 
 
@@ -38,7 +38,7 @@ class Application(tk.Frame):
         self.print_button.pack(side="left")
 
         self.fit_select = tk.StringVar(self, "Cubic")
-        self.fit_control = tk.OptionMenu(self.cmd_frame, self.fit_select, "Linear", "Cubic", "Combo")
+        self.fit_control = tk.OptionMenu(self.cmd_frame, self.fit_select, "Linear", "Cubic", "Quintic")
         self.fit_control.pack(side="left")
 
         self.point_frame = tk.Frame(self)
@@ -58,6 +58,8 @@ class Application(tk.Frame):
             self.knots.append(Pose(x,y,h))
         if self.fit_select.get() == "Combo":
             self.spline = ComboSpline(self.knots)
+        elif self.fit_select.get() == "Quintic":
+            self.spline = QuinticSpline(self.knots)
         elif self.fit_select.get() == "Cubic":
             self.spline = CubicSpline(self.knots)
         else:
