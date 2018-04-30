@@ -1,13 +1,30 @@
 import math
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Union
 
 import numpy as np
 
-from mathlib import Polynomial, Vector2, polynomial_from_parameters
+from mathlib import Polynomial, Vector2, polynomial_from_parameters, LineSegment
 from pose import Pose
 
 
 class SplinePart:
+    def get_point(self, t: float) -> Vector2:
+        raise NotImplementedError
+
+    def get_x(self, t: float) -> float:
+        raise NotImplementedError
+
+    def get_y(self, t: float) -> float:
+        raise NotImplementedError
+
+    def length(self, t: float) -> float:
+        raise NotImplementedError
+
+    def get_unit_tangent_vector(self, t: float) -> Vector2:
+        raise NotImplementedError
+
+
+class CurvePart(SplinePart):
     def __init__(self, P: Polynomial, x0: float, x1: float, t_begin: float, t_end: float, offset: Pose):
         self.curve = P
         self.begin_x = x0
@@ -35,8 +52,10 @@ class SplinePart:
     def length(self, t: float) -> float:
         return self.curve.length(self._get_x(self.t_begin), self._get_x(t))
 
-    def slope(self, t: float) -> float:
-        return self.curve.slope(self._get_x(t))
+    def get_unit_tangent_vector(self, t: float) -> Vector2:
+        angle = math.atan(self.curve.slope(self._get_x(t)))
+        real_angle = angle - self.offset.heading
+        return Vector2(math.cos(real_angle), math.sin(real_angle)).normalized()
 
     def curvature(self, t: float) -> float:
         return self.curve.second_deriv(self.get_x(t))
@@ -45,11 +64,11 @@ class SplinePart:
 class Spline():
     def __init__(self, waypoints: List[Pose]):
         assert len(waypoints) >= 2
-        self.waypoints = waypoints[:]
-        self.length = 0
-        self.parts = []
+        self.waypoints: List[Pose] = waypoints[:]
+        self.length: float = 0
+        self.parts: List[CurvePart] = []
         self.reticulate()
-        self._part_map = {}
+        self._part_map: Dict[float, CurvePart] = {}
 
     def reticulate(self):
         raise NotImplementedError
@@ -68,26 +87,21 @@ class Spline():
 
     def get_point(self, t: float):
         if t > 1:
-            return self.get_point(1) + Vector2(t / self.length, t * self.get_slope(1) / self.length)
+            return self.get_point(1) + self.get_unit_tangent_vector(1) * (t / self.length)
         _part = self.get_part(t)
         return Vector2(_part.get_x(t), _part.get_y(t))
 
-    def get_slope(self, t: float):
-        # assert 0 <= t <= 1
+    def get_unit_tangent_vector(self, t: float) -> Vector2:
         _part = self.get_part(t)
-        return _part.slope(t)
-
-    def get_unit_tangent_vector(self, t: float):
-        _part = self.get_part(t)
-        return Vector2(1, _part.slope(t)).normalized()
+        return _part.get_unit_tangent_vector(t)
 
     def arc_length(self, t: float) -> float:
         length = 0
         for part in self.parts:
             if t >= part.t_end:
-                length += part.length
+                length += part.total_arc_length
             if part.t_end > t > part.t_begin:
-                length += part.length(part.t_begin, t)
+                length += part.length(t)
         return length
 
 
@@ -132,7 +146,7 @@ class LinearSpline(Spline):
             t_begin = t_accum
             t_end = t_accum + lengths[i]
             t_accum = t_end
-            part = SplinePart(curves[i], x0, x1, t_begin, t_end, wp)
+            part = CurvePart(curves[i], x0, x1, t_begin, t_end, wp)
 
             self.parts.append(part)
 
@@ -187,7 +201,7 @@ class CubicSpline(Spline):
             t_begin = t_accum
             t_end = t_accum + lengths[i]
             t_accum = t_end
-            part = SplinePart(curves[i], x0, x1, t_begin, t_end, wp)
+            part = CurvePart(curves[i], x0, x1, t_begin, t_end, wp)
 
             self.parts.append(part)
 
@@ -262,7 +276,7 @@ class ComboSpline(Spline):
             t_begin = t_accum
             t_end = t_accum + lengths[i]
             t_accum = t_end
-            part = SplinePart(curves[i], x0, x1, t_begin, t_end, wp)
+            part = CurvePart(curves[i], x0, x1, t_begin, t_end, wp)
 
             self.parts.append(part)
 
@@ -325,7 +339,145 @@ class QuinticSpline(Spline):
             t_begin = t_accum
             t_end = t_accum + lengths[i]
             t_accum = t_end
-            part = SplinePart(curves[i], x0, x1, t_begin, t_end, wp)
+            part = CurvePart(curves[i], x0, x1, t_begin, t_end, wp)
 
             self.parts.append(part)
 
+
+class Arc:
+    def __init__(self, center: Vector2, radius: float, start_angle: float, end_angle: float):
+        self.center: Vector2 = center
+        self.radius: float = radius
+        self.start_angle: float = start_angle
+        self.end_angle: float = end_angle
+
+    def r(self, t: float) -> Vector2:
+        angle = t * (self.end_angle - self.start_angle) + self.start_angle
+        return self.center + Vector2(math.cos(angle), math.sin(angle)) * self.radius
+
+    def unit_tangent_vector(self, t: float) -> Vector2:
+        angle = t * (self.end_angle - self.start_angle) + self.start_angle
+        return Vector2(math.sin(angle), math.cos(angle)).normalized()
+
+    def arc_length(self):
+        return self.radius * abs(self.end_angle - self.start_angle)
+
+
+class ArcPart(SplinePart):
+    def _get_t(self, t):
+        return (t - self.t_begin) / (self.t_end - self.t_begin)
+
+    def get_point(self, t: float) -> Vector2:
+        return self.part.r(self._get_t(t))
+
+    def get_x(self, t: float) -> float:
+        return self.get_point(t).x
+
+    def get_y(self, t: float) -> float:
+        return self.get_point(t).y
+
+    def length(self, t: float) -> float:
+        return self.part.arc_length() * self._get_t(t)
+
+    def get_unit_tangent_vector(self, t: float) -> Vector2:
+        return self.part.unit_tangent_vector(self._get_t(t))
+
+    def __init__(self, part: Union[Arc, LineSegment], min_t: float, max_t: float):
+        self.part = part
+        self.t_begin = min_t
+        self.t_end = max_t
+
+
+class ArcSpline(Spline):
+    def __init__(self, waypoints: List[Pose]):
+        super().__init__(waypoints)
+
+    def _calc_half_biarc(self, pm: Vector2, wp: Vector2, t: Vector2, d: float, second_arc: bool):
+        n1 = Vector2(-t.y, t.x)
+        colinear = (n1 * (pm - wp) * 2)
+        if colinear != 0:
+            # Arc
+            s1 = ((pm - wp) * (pm - wp) / colinear)
+            c1 = wp + n1 * s1
+            r1 = abs(s1)
+            if r1 == 0:
+                theta1 = 0
+            else:
+                op1 = (wp - c1) / r1
+                om1 = (pm - c1) / r1
+                cs = op1.cross(om1)
+                if d > 0:
+                    theta1 = math.acos(op1 * om1) * (1 if cs > 0 else -1)
+                else:
+                    theta1 = (-2 * math.pi + math.acos(op1 * om1)) * (1 if cs > 0 else -1)
+            if not second_arc:
+                start_angle1 = (wp - c1).angle()
+            else:
+                start_angle1 = (pm - c1).angle()
+                theta1 *= -1
+            return Arc(c1, r1, start_angle1, start_angle1 + theta1)
+        else:
+            # Line
+            return LineSegment(wp, pm)
+
+    def _biarc_fit(self, p1: Pose, p2: Pose):
+        t1 = p1.unit_tangent_vector()
+        t2 = p2.unit_tangent_vector()
+        v = p2 - p1
+
+        # Connection point calculation
+        denom = 2 * (1 - t1 * t2)
+        if denom == 0:
+            if v * t1 == 0:
+                pm = p1 + v / 2
+                c1 = p1 + v / 4
+                c2 = p1 + v * (3 / 4)
+                r1 = abs(v) / 4
+                r2 = r1
+                theta1 = math.pi * (1 if v.cross(t2) < 0 else -1)
+                theta2 = math.pi * (1 if v.cross(t2) > 0 else -1)
+                start1 = (p1 - c1).angle()
+                start2 = (p2 - c2).angle()
+
+                return Arc(c1, r1, start1, start1 + theta1), Arc(c2, r2, start2, start2 + theta2)
+            else:
+                d2 = v * v / (4 * v * t2)
+        else:
+            t = t1 + t2
+            d2 = (-(v * t) + ((v * t) ** 2 + 2 * (1 - t1 * t2) * (v * v)) ** 0.5) / denom
+        pm: Vector2 = (p1 + p2 + d2 * (t1 - t2)) / 2
+
+        ret1 = self._calc_half_biarc(pm, p1, t1, d2, False)
+        ret2 = self._calc_half_biarc(pm, p2, t2, d2, True)
+        return ret1, ret2
+
+    def reticulate(self):
+        all_parts = []
+        lengths = []
+        for i in range(len(self.waypoints) - 1):
+            p1: Pose = self.waypoints[i]
+            p2: Pose = self.waypoints[i + 1]
+            part1, part2 = self._biarc_fit(p1, p2)
+            all_parts += [part1, part2]
+            lengths += [part1.arc_length(), part2.arc_length()]
+        total_len = sum(lengths)
+        t_accum = 0
+        for i in range(len(all_parts)):
+            part_len = lengths[i]
+            part = all_parts[i]
+            t = part_len / total_len
+            self.parts += [ArcPart(part, t_accum, t_accum + t)]
+            t_accum += t
+        self.length = total_len
+
+    def get_part(self, t: float):
+        return super().get_part(t)
+
+    def get_point(self, t: float):
+        return super().get_point(t)
+
+    def get_unit_tangent_vector(self, t: float):
+        return super().get_unit_tangent_vector(t)
+
+    def arc_length(self, t: float) -> float:
+        return super().arc_length(t)

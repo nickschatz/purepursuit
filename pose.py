@@ -18,5 +18,8 @@ class Pose(Vector2):
 
         return Pose(vec.x, vec.y, self.heading - pose.heading)
 
+    def unit_tangent_vector(self):
+        return Vector2(math.cos(self.heading), math.sin(self.heading)).normalized()
+
     def __repr__(self):
         return "Pose(x={}, y={}, heading={})".format(self.x, self.y, self.heading)

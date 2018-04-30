@@ -1,5 +1,6 @@
 import math
-from typing import Union, List, Tuple
+from numbers import Number
+from typing import Union, List, Tuple, Any
 import numpy as np
 
 
@@ -44,11 +45,18 @@ class Vector2:
         else:
             return Vector2(self.x * other, self.y * other)
 
+    def __rmul__(self, other):
+        return self * other
+
+    def __truediv__(self, other: Union[float, int]):
+        assert type(other) in (float, int)
+        return Vector2(self.x / other, self.y / other)
+
     def __repr__(self):
         return "Vector({}, {})".format(self.x, self.y)
 
     def __sub__(self, other):
-        assert type(other) == Vector2
+        # quack quack
         return Vector2(self.x - other.x, self.y - other.y)
 
     def __add__(self, other):
@@ -62,6 +70,12 @@ class Vector2:
 
     def __neg__(self):
         return self * -1
+
+    def cross(self, other) -> float:
+        return self.x * other.y - self.y * other.x
+
+    def angle(self):
+        return math.atan2(self.y, self.x)
 
 
 class LineSegment:
@@ -99,8 +113,14 @@ class LineSegment:
             return tr_point.x / self.slope.x
         return (tr_point.x / self.slope.x + tr_point.y / self.slope.y) / 2
 
-    def r(self, t):
-        return self.intersect + self.slope * t
+    def r(self, t: float) -> Vector2:
+        return self.intersect + self.slope * t * self.max_t
+
+    def unit_tangent_vector(self, t: float) -> Vector2:
+        return self.slope
+
+    def arc_length(self):
+        return self.max_t
 
     def on_line(self, point: Vector2, epsilon=1e-3):
 
@@ -110,9 +130,6 @@ class LineSegment:
         elif self.slope.y == 0:
             return abs(tr_point.y) < epsilon
         return abs(tr_point.x / self.slope.x - tr_point.y / self.slope.y) < epsilon
-
-    def in_segment(self, t: float):
-        return 0 <= t <= self.max_t
 
     def __repr__(self):
         return "Line(t<{}, {}> + <{}, {}>".format(self.slope.x, self.slope.y, self.intersect.x, self.intersect.y)

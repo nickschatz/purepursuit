@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional, Union, Callable
 
 import mathlib
 from mathlib import LineSegment, Vector2
-from splines import ComboSpline, CubicSpline, Spline, LinearSpline
+from splines import ComboSpline, CubicSpline, Spline, LinearSpline, ArcSpline
 
 import copy
 
@@ -29,6 +29,8 @@ class SplinePath(Path):
             self.spline = CubicSpline(self.path)
         elif interpolation_strategy == InterpolationStrategy.LINEAR:
             self.spline = LinearSpline(self.path)
+        elif interpolation_strategy == InterpolationStrategy.BIARC:
+            self.spline = ArcSpline(self.path)
         else:
             raise ValueError(f"Invalid interpolation strategy {interpolation_strategy}")
 
@@ -65,8 +67,8 @@ class SplinePath(Path):
                 last_pt = guess_pt
 
         pt = last_pt
-        # t_guess = t_robot + lookahead_radius / self.spline.length
-        # pt = self.spline.get_point(t_guess)
+        t_guess = t_robot + lookahead_radius / self.spline.length
+        pt = self.spline.get_point(t_guess)
 
         dist = pt.distance(pose)
 
@@ -81,6 +83,7 @@ class InterpolationStrategy:
     CUBIC = 1
     QUINTIC = 2
     COMBO4_5 = 3
+    BIARC = 4
 
 
 class PurePursuitController:
