@@ -6,7 +6,7 @@ import splines
 from pose import Pose
 
 if __name__ == '__main__':
-    waypoints = [Pose(x=1.5, y=-10.0, heading=0.0), Pose(x=18.0, y=-8.0, heading=0.5235987755982988), Pose(x=20.0, y=5.0, heading=1.5707963267948966), Pose(x=20.5, y=6.0, heading=0.7853981633974483), Pose(x=24.0, y=7.5, heading=-0.17453292519943295)]
+    waypoints = [Pose(x=1.5, y=-10.0, heading=0.0), Pose(x=16.5, y=-10.0, heading=0.0), Pose(x=19.5, y=0.0, heading=1.5707963267948966), Pose(x=19.5, y=4.0, heading=1.5707963267948966), Pose(x=24.0, y=7.0, heading=-0.2617993877991494)]
 
     spline2 = splines.CubicSpline(waypoints)
     spline1 = splines.QuinticSpline(waypoints)
