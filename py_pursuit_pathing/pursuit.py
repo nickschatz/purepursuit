@@ -1,13 +1,17 @@
-import math
-from typing import List, Tuple, Optional, Union, Callable
+from typing import List, Tuple
 
-import mathlib
-from mathlib import LineSegment, Vector2
-from splines import ComboSpline, CubicSpline, Spline, LinearSpline, ArcSpline
+from py_pursuit_pathing.mathlib import Vector2
+from py_pursuit_pathing.motion_profile import MotionProfile
+from py_pursuit_pathing.splines import ComboSpline, CubicSpline, LinearSpline, ArcSpline, QuinticSpline
 
-import copy
+from py_pursuit_pathing.pose import Pose
 
-from pose import Pose
+
+def flip_waypoints_y(path: List[Pose]):
+    news = []
+    for wp in path:
+        news.append(Pose(wp.x, -wp.y, -wp.heading))
+    return news
 
 
 class Path:
@@ -15,18 +19,25 @@ class Path:
         pass
 
     def calc_goal(self, pose: Pose,
-                  lookahead_radius: float) -> Tuple[Vector2, float]:
+                  lookahead_radius: float,
+                  t_robot: float) -> Tuple[Vector2, float]:
+        pass
+
+    def get_robot_path_position(self, pose: Pose):
         pass
 
 
 class SplinePath(Path):
     def __init__(self, waypoints: List[Pose], interpolation_strategy: int):
         super().__init__()
+        print(f"Reticulating {interpolation_strategy} of length {len(waypoints)}")
         self.path = waypoints[:]
         if interpolation_strategy == InterpolationStrategy.COMBO4_5:
             self.spline = ComboSpline(self.path)
         elif interpolation_strategy == InterpolationStrategy.CUBIC:
             self.spline = CubicSpline(self.path)
+        elif interpolation_strategy == InterpolationStrategy.QUINTIC:
+            self.spline = QuinticSpline(self.path)
         elif interpolation_strategy == InterpolationStrategy.LINEAR:
             self.spline = LinearSpline(self.path)
         elif interpolation_strategy == InterpolationStrategy.BIARC:
@@ -34,48 +45,33 @@ class SplinePath(Path):
         else:
             raise ValueError(f"Invalid interpolation strategy {interpolation_strategy}")
 
-    def calc_goal(self, pose: Pose,
-                  lookahead_radius: float):
-
+    def get_robot_path_position(self, pose: Pose):
         # Find closest t to pose
         t_robot = 0
         min_dist_sq = 1e10
         # TODO better numerical method for finding close point, if necessary
-        t_granularity = int(self.spline.length * 10)
+        t_granularity = int(self.spline.length * 5)
         for t in range(t_granularity):
-            t = t/t_granularity
+            t = t / t_granularity
             pt = self.spline.get_point(t)
             dist_sq = pt.sq_dist(pose)
             if dist_sq < min_dist_sq:
                 min_dist_sq = dist_sq
                 t_robot = t
+        return t_robot
+
+    def calc_goal(self, pose: Pose,
+                  lookahead_radius: float, t_robot: float):
 
         # Find intersection
-        lookahead_sq = lookahead_radius**2
-        robot_pt = self.spline.get_point(t_robot)
-        last_pt = robot_pt
-        last_diff = 1e10
-        for t in range(t_granularity):
-            t = t_robot + t/t_granularity
-            guess_pt = self.spline.get_point(t)
-            sq_dist = guess_pt.sq_dist(robot_pt)
-            diff = abs(sq_dist - lookahead_sq)
-            if diff > last_diff:
-                break
-            else:
-                last_diff = diff
-                last_pt = guess_pt
-
-        pt = last_pt
         t_guess = t_robot + lookahead_radius / self.spline.length
         pt = self.spline.get_point(t_guess)
+        # line = mathutils.LineSegment(pose, pt)
+        # pt = line.r(lookahead_radius)
 
         dist = pt.distance(pose)
 
         return pt, dist
-
-    def length(self):
-        return self.spline.length
 
 
 class InterpolationStrategy:
@@ -87,14 +83,30 @@ class InterpolationStrategy:
 
 
 class PurePursuitController:
-    def __init__(self, pose: Pose, waypoints: List[Pose], lookahead_base: float,
-                 interpol_strategy: int=InterpolationStrategy.CUBIC):
-        self.pose = pose
+    def __init__(self, waypoints: List[Pose],
+                 lookahead_base: float,
+                 cruise_speed: float,
+                 acc: float,
+                 interpol_strat: int = InterpolationStrategy.CUBIC):
         self.lookahead_base = lookahead_base
-        self.path = SplinePath(waypoints, interpol_strategy)
+        self.path = SplinePath(waypoints, interpol_strat)
         self.waypoints = waypoints
         self.unpassed_waypoints = waypoints[:]
         self.end_point = waypoints[-1]
+        self.acc = acc
+        self.cruise_speed = cruise_speed
+        self.speed_profile = MotionProfile(start=0, end=self.get_path_length(),
+                                           cruise_speed=cruise_speed, acc=acc)
+
+    def init(self):
+        """
+        Resets passed waypoints
+        :return:
+        """
+        self.unpassed_waypoints = self.waypoints[:]
+
+    def get_path_length(self):
+        return self.path.spline.length
 
     def lookahead(self, speed: float) -> float:
         """
@@ -102,18 +114,26 @@ class PurePursuitController:
         :param speed: Robot speed, from 0.0 to 1.0 as a percent of the max speed
         :return: Radius of the lookahead circle
         """
-        min_lookahead = 1
-        return min_lookahead + ((speed - 0.2) / 0.6) * (self.lookahead_base - min_lookahead)
+        min_lookahead = 1.2
+        return min_lookahead + \
+               (speed / self.cruise_speed) * (self.lookahead_base - min_lookahead)
 
-    def curvature(self, pose: Pose, speed: float) -> Tuple[float, Vector2, Spline]:
+    def curvature(self, pose: Pose) -> Tuple[float, float, float]:
         """
         Calculate the curvature of the arc needed to continue following the path
         curvature is 1/(radius of turn)
         :param pose: The robot's pose
         :param speed: The speed of the robot, from 0.0 to 1.0 as a percent of max speed
-        :return: The curvature of the path and the cross track error
+        :return: The curvature of the path, the cross track error, and the speed at which to drive at (feet/sec)
         """
+
+        t_robot = self.path.get_robot_path_position(pose)
+        mp_idx = round(t_robot * len(self.speed_profile))
+        mp_point = self.speed_profile[mp_idx]
+        speed = mp_point.velocity
+
         lookahead_radius = self.lookahead(speed)
+        goal, dist = self.path.calc_goal(pose, lookahead_radius, t_robot)
 
         # We're probably only going to pass one waypoint per loop (or have multiple chances to "pass" a waypoint)
         # We need to keep track of the waypoints so we know when we can go to the end
@@ -122,12 +142,15 @@ class PurePursuitController:
                 self.unpassed_waypoints.remove(point)
                 break
 
-        goal, dist = self.path.calc_goal(pose, lookahead_radius)
+        goal_rs = goal.translated(pose)
+
+        goaly = goal_rs.y
+        goal_rs_dist = goal_rs.distance(Vector2(0,0))
         try:
-            curv = -2 * goal.translated(pose).y / dist ** 2
+            curv = 2 * goaly / lookahead_radius ** 2
         except ZeroDivisionError:
             curv = 0
-        return curv, goal, self.path.spline
+        return curv, dist, speed
 
     def is_approaching_end(self, pose):
         return len(self.unpassed_waypoints) == 0
@@ -140,4 +163,7 @@ class PurePursuitController:
         """
         translated_end = self.end_point.translated(pose)
         err = abs(translated_end.x)
-        return pose.distance(self.end_point) < self.lookahead_base and translated_end.x < 0
+        return self.is_approaching_end(pose) and translated_end.x < 0
+
+    def get_endcte(self, pose):
+        return self.end_point.translated(pose).y

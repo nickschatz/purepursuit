@@ -2,8 +2,7 @@ import math
 import matplotlib.pylab as plot
 import time
 
-from pursuit import Pose, PurePursuitController, InterpolationStrategy
-from mathlib import Vector2
+from py_pursuit_pathing.pursuit import Pose, PurePursuitController, InterpolationStrategy
 
 
 def radius_ratio(R, D):
@@ -28,7 +27,7 @@ if __name__ == '__main__':
     path = [Pose(x=1.5, y=-10.0, heading=0.0), Pose(x=16.5, y=-10.0, heading=0.0), Pose(x=19.5, y=0.0, heading=1.5707963267948966), Pose(x=19.5, y=4.0, heading=1.5707963267948966), Pose(x=24.0, y=7.0, heading=-0.2617993877991494)]
 
     pose = Pose(1.5, -10, 0 * math.pi/4)
-    speed = max_speed
+    speed = 0
 
     lookahead = 2
     dt = 1/1000
@@ -39,7 +38,9 @@ if __name__ == '__main__':
 
     curvature_times = []
 
-    pursuit = PurePursuitController(pose, path, lookahead, InterpolationStrategy.BIARC)
+    pursuit = PurePursuitController(path, lookahead, interpol_strat=InterpolationStrategy.BIARC,
+                                    cruise_speed=max_speed, acc=acc)
+    pursuit.init()
     print("Done with spline")
 
     curve = 0
@@ -51,12 +52,14 @@ if __name__ == '__main__':
         #try:
         if loop_ct % controller_ms == 0:
             curvature_perf = time.perf_counter()
-            curve, target, spline = pursuit.curvature(pose, speed/max_speed)
+            curve, cte, speed = pursuit.curvature(pose)
             curvature_times.append(time.perf_counter() - curvature_perf)
+        if speed < 0.1:
+            speed = 0.1
         if curve == 0:
             left_speed = right_speed = speed
         else:
-            radius = 1 / curve
+            radius = 1 / -curve
             if radius > 0:
                 left_speed = speed
                 right_speed = speed * radius_ratio(radius, width)
@@ -74,12 +77,6 @@ if __name__ == '__main__':
         pose.heading += dt * angular_rate
         # print("{}\t{}\t{}\t{}\t{}\t{}".format(time, pose.x, pose.y, target.x, target.y, pose.distance(path[-1])))
 
-        target_x += [target.x]
-        target_y += [target.y]
-        lookahead_percent += [abs(target.distance(pose) - lookahead)]
-        target = target.translated(pose)
-        targetp_x += [target.x + pose.x]
-        targetp_y += [target.y + pose.y]
         travel_x += [pose.x]
         travel_y += [pose.y]
         distance += [pose.distance(path[-1])]
@@ -91,6 +88,7 @@ if __name__ == '__main__':
     print("Simulated {} seconds in {} real seconds".format(current_time, elapsed_realtime))
     plot.figure(2)
 
+    spline = pursuit.path.spline
     xs = []
     ys = []
     for t in range(1000):
@@ -104,9 +102,6 @@ if __name__ == '__main__':
 
     for wp in path:
         plot.plot(wp.x, wp.y, 'bo')
-
-    plot.figure(1)
-    plot.plot(times, lookahead_percent)
 
     plot.show()
 

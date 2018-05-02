@@ -3,8 +3,8 @@ from typing import List, Tuple, Dict, Union
 
 import numpy as np
 
-from mathlib import Polynomial, Vector2, polynomial_from_parameters, LineSegment
-from pose import Pose
+from py_pursuit_pathing.mathlib import Polynomial, Vector2, polynomial_from_parameters, LineSegment
+from py_pursuit_pathing.pose import Pose
 
 
 class SplinePart:

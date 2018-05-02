@@ -1,7 +1,6 @@
-import math
 import matplotlib.pyplot as plot
 
-import mathlib
+from py_pursuit_pathing import mathlib
 
 if __name__ == "__main__":
     P1 = mathlib.Polynomial([-0.3800000000000009, 2.687005768508887, 0.0, 0.0])

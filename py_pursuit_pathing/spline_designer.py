@@ -2,8 +2,8 @@ import math
 import tkinter as tk
 from PIL import ImageTk, Image
 
-from splines import ComboSpline, CubicSpline, LinearSpline, QuinticSpline, ArcSpline
-from pose import Pose
+from py_pursuit_pathing.splines import ComboSpline, CubicSpline, LinearSpline, QuinticSpline, ArcSpline
+from py_pursuit_pathing.pose import Pose
 
 
 class Application(tk.Frame):

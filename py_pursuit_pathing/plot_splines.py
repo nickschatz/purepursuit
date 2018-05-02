@@ -1,9 +1,7 @@
-import math
 import matplotlib.pyplot as plot
 
-import mathlib
-import splines
-from pose import Pose
+from py_pursuit_pathing import splines
+from py_pursuit_pathing.pose import Pose
 
 if __name__ == '__main__':
     waypoints = [Pose(x=1.5, y=-10.0, heading=0.0), Pose(x=16.5, y=-10.0, heading=0.0), Pose(x=19.5, y=0.0, heading=1.5707963267948966), Pose(x=19.5, y=4.0, heading=1.5707963267948966), Pose(x=24.0, y=7.0, heading=-0.2617993877991494)]
