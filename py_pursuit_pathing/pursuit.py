@@ -21,10 +21,10 @@ class Path:
     def calc_goal(self, pose: Pose,
                   lookahead_radius: float,
                   t_robot: float) -> Tuple[Vector2, float]:
-        pass
+        raise NotImplementedError
 
-    def get_robot_path_position(self, pose: Pose):
-        pass
+    def get_robot_path_position(self, pose: Pose) -> Tuple[float, float]:
+        raise NotImplementedError
 
 
 class SplinePath(Path):
@@ -45,7 +45,7 @@ class SplinePath(Path):
         else:
             raise ValueError(f"Invalid interpolation strategy {interpolation_strategy}")
 
-    def get_robot_path_position(self, pose: Pose):
+    def get_robot_path_position(self, pose: Pose) -> Tuple[float, float]:
         # Find closest t to pose
         t_robot = 0
         min_dist_sq = 1e10
@@ -58,7 +58,7 @@ class SplinePath(Path):
             if dist_sq < min_dist_sq:
                 min_dist_sq = dist_sq
                 t_robot = t
-        return t_robot
+        return t_robot, min_dist_sq**0.5
 
     def calc_goal(self, pose: Pose,
                   lookahead_radius: float, t_robot: float):
@@ -66,7 +66,7 @@ class SplinePath(Path):
         # Find intersection
         t_guess = t_robot + lookahead_radius / self.spline.length
         pt = self.spline.get_point(t_guess)
-        # line = mathutils.LineSegment(pose, pt)
+        # line = mathlib.LineSegment(pose, pt)
         # pt = line.r(lookahead_radius)
 
         dist = pt.distance(pose)
@@ -97,6 +97,7 @@ class PurePursuitController:
         self.cruise_speed = cruise_speed
         self.speed_profile = MotionProfile(start=0, end=self.get_path_length(),
                                            cruise_speed=cruise_speed, acc=acc)
+        self.cte = 0
 
     def init(self):
         """
@@ -104,11 +105,12 @@ class PurePursuitController:
         :return:
         """
         self.unpassed_waypoints = self.waypoints[:]
+        self.cte = 0
 
     def get_path_length(self):
         return self.path.spline.length
 
-    def lookahead(self, speed: float) -> float:
+    def lookahead(self, speed: float, err: float) -> float:
         """
         Calculate the lookahead distance based on the robot speed
         :param speed: Robot speed, from 0.0 to 1.0 as a percent of the max speed
@@ -116,7 +118,7 @@ class PurePursuitController:
         """
         min_lookahead = 1.2
         return min_lookahead + \
-               (speed / self.cruise_speed) * (self.lookahead_base - min_lookahead)
+               (speed / self.cruise_speed) * (self.lookahead_base - min_lookahead) + err**2
 
     def curvature(self, pose: Pose) -> Tuple[float, float, float]:
         """
@@ -127,18 +129,18 @@ class PurePursuitController:
         :return: The curvature of the path, the cross track error, and the speed at which to drive at (feet/sec)
         """
 
-        t_robot = self.path.get_robot_path_position(pose)
+        t_robot, self.cte = self.path.get_robot_path_position(pose)
         mp_idx = round(t_robot * len(self.speed_profile))
         mp_point = self.speed_profile[mp_idx]
         speed = mp_point.velocity
 
-        lookahead_radius = self.lookahead(speed)
+        lookahead_radius = self.lookahead(speed, self.cte)
         goal, dist = self.path.calc_goal(pose, lookahead_radius, t_robot)
 
         # We're probably only going to pass one waypoint per loop (or have multiple chances to "pass" a waypoint)
         # We need to keep track of the waypoints so we know when we can go to the end
         for point in self.unpassed_waypoints:
-            if pose.distance(point) < lookahead_radius:
+            if pose.distance(point) < self.lookahead_base:
                 self.unpassed_waypoints.remove(point)
                 break
 
@@ -161,9 +163,11 @@ class PurePursuitController:
         :param pose: The robot pose
         :return: True if we have gone around the path and are near the end
         """
-        translated_end = self.end_point.translated(pose)
-        err = abs(translated_end.x)
-        return self.is_approaching_end(pose) and translated_end.x < 0
+        t, err = self.path.get_robot_path_position(pose)
+        return abs((t * self.get_path_length()) - self.get_path_length()) < dist_margin
 
     def get_endcte(self, pose):
         return self.end_point.translated(pose).y
+
+    def get_cte(self):
+        return self.cte

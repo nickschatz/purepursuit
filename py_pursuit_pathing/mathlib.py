@@ -44,7 +44,6 @@ class Vector2:
             return Vector2(self.x * other, self.y * other)
         return self.x * other.x + self.y * other.y
 
-
     def __rmul__(self, other):
         return self * other
 
