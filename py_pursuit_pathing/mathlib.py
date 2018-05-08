@@ -4,6 +4,20 @@ from typing import Union, List, Tuple, Any
 import numpy as np
 
 
+def normalize_angle(angle: float):
+    ang = angle % (2*math.pi)
+    if ang < 0:
+        return ang + 2*math.pi
+    return ang
+
+
+def to_heading(angle: float) -> float:
+    n = normalize_angle(angle)
+    if n > math.pi:
+        return n - 2*math.pi
+    return n
+
+
 class Vector2:
     """
     Waypoint for path planning. x,y are in world coordinates
@@ -40,7 +54,7 @@ class Vector2:
         return Vector2(self.x / magn, self.y / magn)
 
     def __mul__(self, other):
-        if type(other) in (float, int):
+        if type(other) in (float, int, np.float64):
             return Vector2(self.x * other, self.y * other)
         return self.x * other.x + self.y * other.y
 
@@ -113,7 +127,7 @@ class LineSegment:
         return (tr_point.x / self.slope.x + tr_point.y / self.slope.y) / 2
 
     def r(self, t: float) -> Vector2:
-        return self.intersect + self.slope * t * self.max_t
+        return self.intersect + self.slope * (t * self.max_t)
 
     def unit_tangent_vector(self, t: float) -> Vector2:
         return self.slope
@@ -202,3 +216,55 @@ class Polynomial:
 def polynomial_from_parameters(parameters: np.ndarray) -> Polynomial:
     parameters = list(parameters.flatten().tolist())[0]  # ew ew ew
     return Polynomial(parameters)
+
+def sgn(x):
+    return 0 if x == 0 else x/abs(x)
+
+class Arc:
+    def __init__(self, center: Vector2, radius: float, start_angle: float, end_angle: float,
+                 direction: int = 1):
+        self.center: Vector2 = center
+        self.radius: float = radius
+        self.start_angle: float = start_angle
+        self.end_angle: float = end_angle
+
+        self._cache = {}
+
+    def r(self, t: float) -> Vector2:
+        if t in self._cache:
+            return self._cache[t]
+        angle = t * (self.end_angle - self.start_angle) + self.start_angle
+        r_ = self.center + Vector2(math.cos(angle), math.sin(angle)) * self.radius
+        self._cache[t] = r_
+        return r_
+
+    def unit_tangent_vector(self, t: float) -> Vector2:
+        angle = t * (self.end_angle - self.start_angle) + self.start_angle
+        return Vector2(math.sin(angle), math.cos(angle)).normalized()
+
+    def arc_length(self):
+        return self.radius * abs(self.end_angle - self.start_angle)
+
+    def angle_in(self, angle: float) -> bool:
+        return 0 <= self.invert(angle) <= 1
+
+    def invert(self, angle: float) -> float:
+        if self.end_angle - self.start_angle == 0:
+            return 0
+        return (angle - self.start_angle) / (self.end_angle - self.start_angle)
+
+    def project(self, point: Vector2):
+        angle = (self.center - point).angle()
+        opp_angle = angle + math.pi
+        neg_angle = angle - math.pi
+        # assert 0 <= opp_angle <= 2 * math.pi
+        if self.angle_in(angle):
+            return self.invert(angle)
+        elif self.angle_in(opp_angle):
+            return self.invert(opp_angle)
+        elif self.angle_in(neg_angle):
+            return self.invert(neg_angle)
+        raise ValueError
+
+    def __repr__(self):
+        return f"Arc(center={self.center}, radius={self.radius}, start_angle={self.start_angle}, end_angle={self.end_angle}"

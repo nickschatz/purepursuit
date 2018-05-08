@@ -52,8 +52,8 @@ if __name__ == '__main__':
         #try:
         if loop_ct % controller_ms == 0:
             curvature_perf = time.perf_counter()
-            curve, cte, speed = pursuit.curvature(pose)
-            curvature_times.append(time.perf_counter() - curvature_perf)
+            curve, cte, speed, goal_pt = pursuit.curvature(pose)
+            curvature_times.append((time.perf_counter() - curvature_perf) * 1000)
         if speed < 0.1:
             speed = 0.1
         if curve == 0:
@@ -85,6 +85,7 @@ if __name__ == '__main__':
         loop_ct += 1
     elapsed_realtime = time.perf_counter() - start
     print(f"Average curvature cycle time: {sum(curvature_times)/len(curvature_times)} ms")
+    print(f"Total curvature cycle time: {sum(curvature_times)} ms")
     print("Simulated {} seconds in {} real seconds".format(current_time, elapsed_realtime))
     plot.figure(2)
 
@@ -95,14 +96,16 @@ if __name__ == '__main__':
         pt = spline.get_point(t / 1000)
         xs += [pt.x]
         ys += [pt.y]
-    plot.plot(xs, ys)
+    do_charts = False
+    if do_charts:
+        plot.plot(xs, ys)
 
-    plot.plot(travel_x, travel_y)
-    # plot.plot(target_x, target_y)
+        plot.plot(travel_x, travel_y)
+        plot.plot(target_x, target_y)
 
-    for wp in path:
-        plot.plot(wp.x, wp.y, 'bo')
+        for wp in path:
+            plot.plot(wp.x, wp.y, 'bo')
 
-    plot.show()
+        plot.show()
 
 

@@ -1,9 +1,11 @@
 import math
+import typing
 from typing import List, Tuple, Dict, Union
 
 import numpy as np
 
-from py_pursuit_pathing.mathlib import Polynomial, Vector2, polynomial_from_parameters, LineSegment
+from py_pursuit_pathing import mathlib
+from py_pursuit_pathing.mathlib import Polynomial, Vector2, polynomial_from_parameters, LineSegment, Arc
 from py_pursuit_pathing.pose import Pose
 
 
@@ -21,6 +23,9 @@ class SplinePart:
         raise NotImplementedError
 
     def get_unit_tangent_vector(self, t: float) -> Vector2:
+        raise NotImplementedError
+
+    def project(self, point: Vector2):
         raise NotImplementedError
 
 
@@ -69,6 +74,7 @@ class Spline():
         self.parts: List[CurvePart] = []
         self.reticulate()
         self._part_map: Dict[float, CurvePart] = {}
+        self._point_cache: Dict[float, Vector2] = {}
 
     def reticulate(self):
         raise NotImplementedError
@@ -86,10 +92,14 @@ class Spline():
         return _part
 
     def get_point(self, t: float):
+        if t in self._point_cache:
+            return self._point_cache[t]
         if t > 1:
             return self.get_point(1) + self.get_unit_tangent_vector(1) * (t / self.length)
         _part = self.get_part(t)
-        return Vector2(_part.get_x(t), _part.get_y(t))
+        pt = Vector2(_part.get_x(t), _part.get_y(t))
+        self._point_cache[t] = pt
+        return pt
 
     def get_unit_tangent_vector(self, t: float) -> Vector2:
         _part = self.get_part(t)
@@ -103,6 +113,9 @@ class Spline():
             if part.t_end > t > part.t_begin:
                 length += part.length(t)
         return length
+
+    def get_closest_t_to(self, point: Vector2):
+        raise NotImplementedError
 
 
 class LinearSpline(Spline):
@@ -344,28 +357,17 @@ class QuinticSpline(Spline):
             self.parts.append(part)
 
 
-class Arc:
-    def __init__(self, center: Vector2, radius: float, start_angle: float, end_angle: float):
-        self.center: Vector2 = center
-        self.radius: float = radius
-        self.start_angle: float = start_angle
-        self.end_angle: float = end_angle
-
-    def r(self, t: float) -> Vector2:
-        angle = t * (self.end_angle - self.start_angle) + self.start_angle
-        return self.center + Vector2(math.cos(angle), math.sin(angle)) * self.radius
-
-    def unit_tangent_vector(self, t: float) -> Vector2:
-        angle = t * (self.end_angle - self.start_angle) + self.start_angle
-        return Vector2(math.sin(angle), math.cos(angle)).normalized()
-
-    def arc_length(self):
-        return self.radius * abs(self.end_angle - self.start_angle)
-
-
 class ArcPart(SplinePart):
     def _get_t(self, t):
+        """
+        Lerp t between 0 and 1
+        :param t:
+        :return:
+        """
         return (t - self.t_begin) / (self.t_end - self.t_begin)
+
+    def _inv_t(self, t):
+        return t * (self.t_end - self.t_begin) + self.t_begin
 
     def get_point(self, t: float) -> Vector2:
         return self.part.r(self._get_t(t))
@@ -382,6 +384,17 @@ class ArcPart(SplinePart):
     def get_unit_tangent_vector(self, t: float) -> Vector2:
         return self.part.unit_tangent_vector(self._get_t(t))
 
+    def project(self, point: Vector2):
+        if type(self.part) == Arc:
+            part = typing.cast(Arc, self.part)
+            return self._inv_t(part.project(point))
+        else:
+            line = typing.cast(LineSegment, self.part)
+            a_sc = (point - line.intersect) * line.slope
+            if 0 <= a_sc <= line.max_t:
+                return self._inv_t(a_sc / line.max_t)
+            raise ValueError
+
     def __init__(self, part: Union[Arc, LineSegment], min_t: float, max_t: float):
         self.part = part
         self.t_begin = min_t
@@ -395,7 +408,7 @@ class ArcSpline(Spline):
     def _calc_half_biarc(self, pm: Vector2, wp: Vector2, t: Vector2, d: float, second_arc: bool):
         n1 = Vector2(-t.y, t.x)
         colinear = (n1 * (pm - wp) * 2)
-        if colinear != 0:
+        if abs(colinear) > 1e-4:
             # Arc
             s1 = ((pm - wp) * (pm - wp) / colinear)
             c1 = wp + n1 * s1
@@ -418,6 +431,8 @@ class ArcSpline(Spline):
             return Arc(c1, r1, start_angle1, start_angle1 + theta1)
         else:
             # Line
+            if second_arc:
+                return LineSegment(pm, wp)
             return LineSegment(wp, pm)
 
     def _biarc_fit(self, p1: Pose, p2: Pose):
@@ -481,3 +496,22 @@ class ArcSpline(Spline):
 
     def arc_length(self, t: float) -> float:
         return super().arc_length(t)
+
+    def get_closest_t_to(self, point: Vector2) -> Tuple[float, float]:
+        min_dist = 1e100
+        min_t = 0
+        for _part in self.parts:
+            try:
+                t = _part.project(point)
+            except ValueError:
+                continue
+            dist = point.distance(self.get_point(t))
+            if dist < min_dist:
+                min_t = t
+                min_dist = dist
+        if min_dist == 1e100:
+            print("!! Warning, dropped out of closest-point !!")
+            a_sc = (point - self.get_point(1)) * self.get_unit_tangent_vector(1)
+            min_t = 1 + a_sc
+            return min_t, point.distance(self.get_point(min_t))
+        return min_t, min_dist

@@ -1,5 +1,9 @@
 from typing import List, Tuple
 
+from scipy import optimize
+import numpy as np
+
+from py_pursuit_pathing import mathlib
 from py_pursuit_pathing.mathlib import Vector2
 from py_pursuit_pathing.motion_profile import MotionProfile
 from py_pursuit_pathing.splines import ComboSpline, CubicSpline, LinearSpline, ArcSpline, QuinticSpline
@@ -46,19 +50,7 @@ class SplinePath(Path):
             raise ValueError(f"Invalid interpolation strategy {interpolation_strategy}")
 
     def get_robot_path_position(self, pose: Pose) -> Tuple[float, float]:
-        # Find closest t to pose
-        t_robot = 0
-        min_dist_sq = 1e10
-        # TODO better numerical method for finding close point, if necessary
-        t_granularity = int(self.spline.length * 5)
-        for t in range(t_granularity):
-            t = t / t_granularity
-            pt = self.spline.get_point(t)
-            dist_sq = pt.sq_dist(pose)
-            if dist_sq < min_dist_sq:
-                min_dist_sq = dist_sq
-                t_robot = t
-        return t_robot, min_dist_sq**0.5
+        return self.spline.get_closest_t_to(pose)
 
     def calc_goal(self, pose: Pose,
                   lookahead_radius: float, t_robot: float):
@@ -67,10 +59,24 @@ class SplinePath(Path):
         t_guess = t_robot + lookahead_radius / self.spline.length
         pt = self.spline.get_point(t_guess)
         # line = mathlib.LineSegment(pose, pt)
-        # pt = line.r(lookahead_radius)
+        # pt = line.r(lookahead_radius / line.max_t)
+
+        if False:
+            min_dist_sq = 1e10
+            # This can't be easily sped up, at least not without sacrificing a lot of resolution on the
+            # lookahead point calculation
+            t_granularity = int(self.spline.length * 5)
+            t_min = t_robot
+            for t_ in range(int(t_robot * t_granularity), t_granularity + 15):
+                t = t_ / t_granularity
+                pt = self.spline.get_point(t)
+                dist_sq = abs(pt.sq_dist(pose) - lookahead_radius**2)
+                if dist_sq < min_dist_sq:
+                    min_dist_sq = dist_sq
+                    t_min = t
+            pt = self.spline.get_point(t_min)
 
         dist = pt.distance(pose)
-
         return pt, dist
 
 
@@ -87,7 +93,7 @@ class PurePursuitController:
                  lookahead_base: float,
                  cruise_speed: float,
                  acc: float,
-                 interpol_strat: int = InterpolationStrategy.CUBIC):
+                 interpol_strat: int = InterpolationStrategy.BIARC):
         self.lookahead_base = lookahead_base
         self.path = SplinePath(waypoints, interpol_strat)
         self.waypoints = waypoints
@@ -98,6 +104,7 @@ class PurePursuitController:
         self.speed_profile = MotionProfile(start=0, end=self.get_path_length(),
                                            cruise_speed=cruise_speed, acc=acc)
         self.cte = 0
+        self.current_lookahead = 0
 
     def init(self):
         """
@@ -118,9 +125,9 @@ class PurePursuitController:
         """
         min_lookahead = 1.2
         return min_lookahead + \
-               (speed / self.cruise_speed) * (self.lookahead_base - min_lookahead) + err**2
+               (speed / self.cruise_speed) * (self.lookahead_base - min_lookahead)
 
-    def curvature(self, pose: Pose) -> Tuple[float, float, float]:
+    def curvature(self, pose: Pose) -> Tuple[float, float, float, Vector2]:
         """
         Calculate the curvature of the arc needed to continue following the path
         curvature is 1/(radius of turn)
@@ -131,10 +138,15 @@ class PurePursuitController:
 
         t_robot, self.cte = self.path.get_robot_path_position(pose)
         mp_idx = round(t_robot * len(self.speed_profile))
+        if mp_idx >= len(self.speed_profile):
+            mp_idx = len(self.speed_profile)-1
+        if mp_idx < 0:
+            mp_idx = 0
         mp_point = self.speed_profile[mp_idx]
         speed = mp_point.velocity
 
         lookahead_radius = self.lookahead(speed, self.cte)
+        self.current_lookahead = lookahead_radius
         goal, dist = self.path.calc_goal(pose, lookahead_radius, t_robot)
 
         # We're probably only going to pass one waypoint per loop (or have multiple chances to "pass" a waypoint)
@@ -148,11 +160,12 @@ class PurePursuitController:
 
         goaly = goal_rs.y
         goal_rs_dist = goal_rs.distance(Vector2(0,0))
+        # speed -= abs(goaly)
         try:
-            curv = 2 * goaly / lookahead_radius ** 2
+            curv = 2 * goaly / (goal_rs_dist ** 2)
         except ZeroDivisionError:
             curv = 0
-        return curv, dist, speed
+        return curv, dist, speed, goal
 
     def is_approaching_end(self, pose):
         return len(self.unpassed_waypoints) == 0
