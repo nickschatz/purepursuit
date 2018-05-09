@@ -1,6 +1,5 @@
 from typing import List, Tuple
 
-from scipy import optimize
 import numpy as np
 
 from py_pursuit_pathing import mathlib
@@ -61,21 +60,6 @@ class SplinePath(Path):
         # line = mathlib.LineSegment(pose, pt)
         # pt = line.r(lookahead_radius / line.max_t)
 
-        if False:
-            min_dist_sq = 1e10
-            # This can't be easily sped up, at least not without sacrificing a lot of resolution on the
-            # lookahead point calculation
-            t_granularity = int(self.spline.length * 5)
-            t_min = t_robot
-            for t_ in range(int(t_robot * t_granularity), t_granularity + 15):
-                t = t_ / t_granularity
-                pt = self.spline.get_point(t)
-                dist_sq = abs(pt.sq_dist(pose) - lookahead_radius**2)
-                if dist_sq < min_dist_sq:
-                    min_dist_sq = dist_sq
-                    t_min = t
-            pt = self.spline.get_point(t_min)
-
         dist = pt.distance(pose)
         return pt, dist
 
@@ -125,7 +109,7 @@ class PurePursuitController:
         """
         min_lookahead = 1.2
         return min_lookahead + \
-               (speed / self.cruise_speed) * (self.lookahead_base - min_lookahead)
+               (speed / self.cruise_speed) * (self.lookahead_base - min_lookahead) + err
 
     def curvature(self, pose: Pose) -> Tuple[float, float, float, Vector2]:
         """
