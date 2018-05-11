@@ -95,7 +95,8 @@ class Spline():
         if t in self._point_cache:
             return self._point_cache[t]
         if t > 1:
-            return self.get_point(1) + self.get_unit_tangent_vector(1) * (t / self.length)
+            pt = self.get_point(1) + self.get_unit_tangent_vector(1) * t
+            return pt
         _part = self.get_part(t)
         pt = Vector2(_part.get_x(t), _part.get_y(t))
         self._point_cache[t] = pt

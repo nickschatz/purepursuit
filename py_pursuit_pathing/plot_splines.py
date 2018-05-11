@@ -11,11 +11,11 @@ if __name__ == '__main__':
     spline2 = splines.CubicSpline(waypoints)
     spline1 = splines.QuinticSpline(waypoints)
     spline3 = splines.ArcSpline(waypoints)
-    print(spline3.parts[-1].part)
     reference_frame = Pose(0, 0, 0)
     for wp in map(lambda x: x.translated(reference_frame), waypoints):
         plot.plot(wp.x, wp.y, 'bo')
 
+    print(spline3.get_unit_tangent_vector(1))
     xs = []
     ys = []
 
@@ -25,7 +25,7 @@ if __name__ == '__main__':
     xs3 = []
     ys3 = []
     resolution = 1000
-    for t in range(resolution):
+    for t in range(resolution + 200):
         pt = spline1.get_point(t / resolution).translated(reference_frame)
         xs += [pt.x]
         ys += [pt.y]

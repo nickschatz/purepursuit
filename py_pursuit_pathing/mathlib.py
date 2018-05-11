@@ -240,7 +240,7 @@ class Arc:
 
     def unit_tangent_vector(self, t: float) -> Vector2:
         angle = t * (self.end_angle - self.start_angle) + self.start_angle
-        return Vector2(math.sin(angle), math.cos(angle)).normalized()
+        return Vector2(-math.sin(angle), math.cos(angle)).normalized()
 
     def arc_length(self):
         return self.radius * abs(self.end_angle - self.start_angle)
