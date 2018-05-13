@@ -1,3 +1,3 @@
 py-pursuit-pathing
-===
-A library for path following using the pure pursuit algorithm.
+==================
+A library for path following using the adaptive pure pursuit algorithm.
