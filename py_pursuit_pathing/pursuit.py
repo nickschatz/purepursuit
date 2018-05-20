@@ -161,7 +161,7 @@ class PurePursuitController:
         :return: True if we have gone around the path and are near the end
         """
         t, err = self.path.get_robot_path_position(pose)
-        return abs((t * self.get_path_length()) - self.get_path_length()) < dist_margin
+        return abs((t * self.get_path_length()) - self.get_path_length()) < dist_margin or t >= 1
 
     def get_endcte(self, pose):
         return self.end_point.translated(pose).y
