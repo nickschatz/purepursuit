@@ -271,3 +271,6 @@ class Arc:
 
     def __repr__(self):
         return f"Arc(center={self.center}, radius={self.radius}, start_angle={self.start_angle}, end_angle={self.end_angle}"
+
+def lerp(start: float, end: float, param: float) -> float:
+    return (end - start) * param + start

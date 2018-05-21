@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     lookahead = 2
     dt = 1/1000
-    controller_ms = 1000/100
+    controller_ms = 20
     current_time = 0
     loop_ct = 0
     spline = None
@@ -96,7 +96,7 @@ if __name__ == '__main__':
         pt = spline.get_point(t / 1000)
         xs += [pt.x]
         ys += [pt.y]
-    do_charts = False
+    do_charts = True
     if do_charts:
         plot.plot(xs, ys)
 

@@ -5,7 +5,8 @@ import numpy as np
 from py_pursuit_pathing import mathlib
 from py_pursuit_pathing.mathlib import Vector2
 from py_pursuit_pathing.motion_profile import MotionProfile
-from py_pursuit_pathing.splines import ComboSpline, CubicSpline, LinearSpline, ArcSpline, QuinticSpline
+from py_pursuit_pathing.splines import ComboSpline, CubicSpline, LinearSpline, ArcSpline, QuinticSpline, \
+    approximate_spline
 
 from py_pursuit_pathing.pose import Pose
 
@@ -47,6 +48,8 @@ class SplinePath(Path):
             self.spline = ArcSpline(self.path)
         else:
             raise ValueError(f"Invalid interpolation strategy {interpolation_strategy}")
+        if interpolation_strategy != InterpolationStrategy.BIARC:
+            self.spline = approximate_spline(self.spline)
 
     def get_robot_path_position(self, pose: Pose) -> Tuple[float, float]:
         return self.spline.get_closest_t_to(pose)
@@ -77,7 +80,7 @@ class PurePursuitController:
                  lookahead_base: float,
                  cruise_speed: float,
                  acc: float,
-                 interpol_strat: int = InterpolationStrategy.BIARC):
+                 interpol_strat: int = InterpolationStrategy.QUINTIC):
         self.lookahead_base = lookahead_base
         self.path = SplinePath(waypoints, interpol_strat)
         self.waypoints = waypoints

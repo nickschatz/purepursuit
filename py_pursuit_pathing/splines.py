@@ -5,6 +5,7 @@ from typing import List, Tuple, Dict, Union
 import numpy as np
 
 from py_pursuit_pathing import mathlib
+from py_pursuit_pathing.biarc import biarc_fit
 from py_pursuit_pathing.mathlib import Polynomial, Vector2, polynomial_from_parameters, LineSegment, Arc
 from py_pursuit_pathing.pose import Pose
 
@@ -58,8 +59,8 @@ class CurvePart(SplinePart):
         return self.curve.length(self._get_x(self.t_begin), self._get_x(t))
 
     def get_unit_tangent_vector(self, t: float) -> Vector2:
-        angle = math.atan(self.curve.slope(self._get_x(t)))
-        real_angle = angle - self.offset.heading
+        angle = mathlib.normalize_angle(math.atan2(self.curve.slope(self._get_x(t)), 1))
+        real_angle = angle + self.offset.heading
         return Vector2(math.cos(real_angle), math.sin(real_angle)).normalized()
 
     def curvature(self, t: float) -> float:
@@ -117,6 +118,12 @@ class Spline():
 
     def get_closest_t_to(self, point: Vector2):
         raise NotImplementedError
+
+    def get_pose(self, t: float) -> Pose:
+        pt = self.get_point(t)
+        tangent_vec = self.get_unit_tangent_vector(t)
+        ang = mathlib.normalize_angle(tangent_vec.angle())
+        return Pose(pt.x, pt.y, ang)
 
 
 class LinearSpline(Spline):
@@ -406,74 +413,13 @@ class ArcSpline(Spline):
     def __init__(self, waypoints: List[Pose]):
         super().__init__(waypoints)
 
-    def _calc_half_biarc(self, pm: Vector2, wp: Vector2, t: Vector2, d: float, second_arc: bool):
-        n1 = Vector2(-t.y, t.x)
-        colinear = (n1 * (pm - wp) * 2)
-        if abs(colinear) > 1e-4:
-            # Arc
-            s1 = ((pm - wp) * (pm - wp) / colinear)
-            c1 = wp + n1 * s1
-            r1 = abs(s1)
-            if r1 == 0:
-                theta1 = 0
-            else:
-                op1 = (wp - c1) / r1
-                om1 = (pm - c1) / r1
-                cs = op1.cross(om1)
-                if d > 0:
-                    theta1 = math.acos(op1 * om1) * (1 if cs > 0 else -1)
-                else:
-                    theta1 = (-2 * math.pi + math.acos(op1 * om1)) * (1 if cs > 0 else -1)
-            if not second_arc:
-                start_angle1 = (wp - c1).angle()
-            else:
-                start_angle1 = (pm - c1).angle()
-                theta1 *= -1
-            return Arc(c1, r1, start_angle1, start_angle1 + theta1)
-        else:
-            # Line
-            if second_arc:
-                return LineSegment(pm, wp)
-            return LineSegment(wp, pm)
-
-    def _biarc_fit(self, p1: Pose, p2: Pose):
-        t1 = p1.unit_tangent_vector()
-        t2 = p2.unit_tangent_vector()
-        v = p2 - p1
-
-        # Connection point calculation
-        denom = 2 * (1 - t1 * t2)
-        if denom == 0:
-            if v * t1 == 0:
-                pm = p1 + v / 2
-                c1 = p1 + v / 4
-                c2 = p1 + v * (3 / 4)
-                r1 = abs(v) / 4
-                r2 = r1
-                theta1 = math.pi * (1 if v.cross(t2) < 0 else -1)
-                theta2 = math.pi * (1 if v.cross(t2) > 0 else -1)
-                start1 = (p1 - c1).angle()
-                start2 = (p2 - c2).angle()
-
-                return Arc(c1, r1, start1, start1 + theta1), Arc(c2, r2, start2, start2 + theta2)
-            else:
-                d2 = v * v / (4 * v * t2)
-        else:
-            t = t1 + t2
-            d2 = (-(v * t) + ((v * t) ** 2 + 2 * (1 - t1 * t2) * (v * v)) ** 0.5) / denom
-        pm: Vector2 = (p1 + p2 + d2 * (t1 - t2)) / 2
-
-        ret1 = self._calc_half_biarc(pm, p1, t1, d2, False)
-        ret2 = self._calc_half_biarc(pm, p2, t2, d2, True)
-        return ret1, ret2
-
     def reticulate(self):
         all_parts = []
         lengths = []
         for i in range(len(self.waypoints) - 1):
             p1: Pose = self.waypoints[i]
             p2: Pose = self.waypoints[i + 1]
-            part1, part2 = self._biarc_fit(p1, p2)
+            part1, part2 = biarc_fit(p1, p2)
             all_parts += [part1, part2]
             lengths += [part1.arc_length(), part2.arc_length()]
         total_len = sum(lengths)
@@ -516,3 +462,39 @@ class ArcSpline(Spline):
             min_t = 1 + a_sc
             return min_t, point.distance(self.get_point(min_t))
         return min_t, min_dist
+
+
+def approximate_spline(spline: Spline) -> ArcSpline:
+    def split(start, end, eps=0.25/12, depth=0) -> [float]:
+        """
+        Recursively split spline. Returns end points of biarcs
+        :param start:
+        :param end:
+        :param eps:
+        :return:
+        """
+        if abs(start - end) < 1e-4:
+            return [end]
+        pose_beg = spline.get_pose(start)
+        pose_end = spline.get_pose(end)
+        arc1, arc2 = biarc_fit(pose_beg, pose_end)
+
+        # Calculate error
+        resolution = 100
+        for t_ in range(resolution):
+            spline_t = mathlib.lerp(start, end, t_/resolution)
+            arc_t = 2 * t_ / resolution
+            target_arc = arc1
+            if arc_t > 1:
+                target_arc = arc2
+                arc_t -= 1
+            err = spline.get_point(spline_t).distance(target_arc.r(arc_t))
+            if err > eps:
+                break
+        else:
+            return [end]
+        mid = mathlib.lerp(start, end, 0.5)
+        return split(start, mid, depth=depth+1) + split(mid, end, depth=depth+1)
+
+    splits = [0] + split(0, 1)
+    return ArcSpline(list(map(lambda x: spline.get_pose(x), splits)))
