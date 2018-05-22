@@ -5,6 +5,8 @@ from PIL import ImageTk, Image
 from py_pursuit_pathing.splines import ComboSpline, CubicSpline, LinearSpline, QuinticSpline, ArcSpline
 from py_pursuit_pathing.pose import Pose
 
+import matplotlib.pyplot as plot
+
 
 class Application(tk.Frame):
     def __init__(self, master=None):
@@ -15,6 +17,9 @@ class Application(tk.Frame):
         self.pt_frames = []
         self.pack()
         self.create_widgets()
+
+        plot.ion()
+        plot.show()
 
     def draw_field(self):
         self.field_img = ImageTk.PhotoImage(Image.open("2018-field.gif"))
@@ -67,6 +72,18 @@ class Application(tk.Frame):
         else:
             self.spline = LinearSpline(self.knots)
         self.draw_spline()
+
+        ts = []
+        curv = []
+        resolution = 1000
+        for t_ in range(resolution):
+            t = t_ / resolution
+            ts += [t]
+            curv += [self.spline.curvature(t)]
+        plot.clf()
+        plot.plot(ts, curv)
+        plot.draw()
+        plot.pause(0.001)
 
     def remove_point(self, frame):
         self.pt_frames.remove(frame)

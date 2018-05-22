@@ -39,6 +39,20 @@ if __name__ == '__main__':
     plot.plot(xs, ys)
     plot.plot(xs2, ys2)
     # plot.plot(xs3, ys3)
+
+
+    ts = []
+    curv = []
+    resolution = 1000
+    for t_ in range(resolution):
+        t = t_ / resolution
+        ts += [t]
+        curv += [spline1.curvature(t)]
+    plot.figure(2)
+    plot.plot(ts, curv)
+
     plot.show()
+
+
 
 

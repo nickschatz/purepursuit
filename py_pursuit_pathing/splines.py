@@ -11,6 +11,10 @@ from py_pursuit_pathing.pose import Pose
 
 
 class SplinePart:
+    def __init__(self):
+        self.t_end = 0
+        self.t_begin = 0
+
     def get_point(self, t: float) -> Vector2:
         raise NotImplementedError
 
@@ -29,9 +33,16 @@ class SplinePart:
     def project(self, point: Vector2):
         raise NotImplementedError
 
+    def get_curvature(self, t: float):
+        raise NotImplementedError
+
 
 class CurvePart(SplinePart):
+    def project(self, point: Vector2):
+        pass
+
     def __init__(self, P: Polynomial, x0: float, x1: float, t_begin: float, t_end: float, offset: Pose):
+        super().__init__()
         self.curve = P
         self.begin_x = x0
         self.end_x = x1
@@ -63,18 +74,19 @@ class CurvePart(SplinePart):
         real_angle = angle + self.offset.heading
         return Vector2(math.cos(real_angle), math.sin(real_angle)).normalized()
 
-    def curvature(self, t: float) -> float:
-        return self.curve.second_deriv(self.get_x(t))
+    def get_curvature(self, t: float) -> float:
+        slop = self.curve.slope(self._get_x(t))**2
+        return self.curve.second_deriv(self._get_x(t)) / (1 + slop)**(3/2)
 
 
-class Spline():
+class Spline:
     def __init__(self, waypoints: List[Pose]):
         assert len(waypoints) >= 2
         self.waypoints: List[Pose] = waypoints[:]
         self.length: float = 0
-        self.parts: List[CurvePart] = []
+        self.parts: List[SplinePart] = []
         self.reticulate()
-        self._part_map: Dict[float, CurvePart] = {}
+        self._part_map: Dict[float, SplinePart] = {}
         self._point_cache: Dict[float, Vector2] = {}
 
     def reticulate(self):
@@ -102,6 +114,9 @@ class Spline():
         pt = Vector2(_part.get_x(t), _part.get_y(t))
         self._point_cache[t] = pt
         return pt
+
+    def curvature(self, t: float) -> float:
+        return self.get_part(t).get_curvature(t)
 
     def get_unit_tangent_vector(self, t: float) -> Vector2:
         _part = self.get_part(t)
@@ -316,15 +331,20 @@ class QuinticSpline(Spline):
                            Polynomial.get_curvature_row_for_degree(x1, 5),
                            ]), np.mat([[y0], [y1], [t0], [t1], [k0], [k1]])
 
+        def calc_reference(wp1, wp2):
+            ref = wp1.copy()
+            ref.heading = (wp2 - wp1).angle()
+            return ref
+
         waypoints = self.waypoints
         curves = []
         lengths = []
         for n in range(len(waypoints) - 1):
-            waypoint = waypoints[n]
-            next_waypoint = waypoints[n + 1].translated(waypoint)
-            quintic_flag = n + 1 == len(waypoints) - 1
+            ref = calc_reference(waypoints[n], waypoints[n+1])
+            waypoint = waypoints[n].translated(ref)
+            next_waypoint = waypoints[n + 1].translated(ref)
 
-            # First waypoint has zero curvature to begin
+            # Zero curvature at knots
             k0 = 0
             k1 = 0
 
@@ -332,10 +352,10 @@ class QuinticSpline(Spline):
             y0 = 0
             x1 = next_waypoint.x
             y1 = next_waypoint.y
-            t0 = math.tan(0)
+            t0 = math.tan(waypoint.heading)
             t1 = math.tan(next_waypoint.heading)
 
-            cap_tangent = 1e2
+            cap_tangent = 500  # 89.9 deg
             if abs(t1) > cap_tangent:
                 t1 = math.copysign(cap_tangent, t1)
                 print(f"Capping large angle at knot {n+1}")
@@ -354,18 +374,22 @@ class QuinticSpline(Spline):
         t_accum = 0
         for i in range(len(curves)):
             wp = waypoints[i]
-            n_wp = waypoints[i + 1].translated(wp)
+            ref = calc_reference(wp, waypoints[i+1])
+            n_wp = waypoints[i + 1].translated(ref)
             x0 = 0
             x1 = n_wp.x
             t_begin = t_accum
             t_end = t_accum + lengths[i]
             t_accum = t_end
-            part = CurvePart(curves[i], x0, x1, t_begin, t_end, wp)
+            part = CurvePart(curves[i], x0, x1, t_begin, t_end, ref)
 
             self.parts.append(part)
 
 
 class ArcPart(SplinePart):
+    def get_curvature(self, t: float):
+        return self.part.curvature
+
     def _get_t(self, t):
         """
         Lerp t between 0 and 1
@@ -404,6 +428,7 @@ class ArcPart(SplinePart):
             raise ValueError
 
     def __init__(self, part: Union[Arc, LineSegment], min_t: float, max_t: float):
+        super().__init__()
         self.part = part
         self.t_begin = min_t
         self.t_end = max_t

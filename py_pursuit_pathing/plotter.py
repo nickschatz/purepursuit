@@ -24,7 +24,7 @@ if __name__ == '__main__':
     acc = 10
     hopper_x = -2.47 + width / 2 - width
     hopper_y = 6 + 6.5/12 + width / 2
-    path = [Pose(x=1.5, y=-10.0, heading=0.0), Pose(x=16.5, y=-10.0, heading=0.0), Pose(x=19.5, y=0.0, heading=1.5707963267948966), Pose(x=19.5, y=4.0, heading=1.5707963267948966), Pose(x=24.0, y=7.0, heading=-0.2617993877991494)]
+    path = [Pose(x=1.5, y=-10.0, heading=0.0), Pose(x=20.0, y=0.0, heading=1.5707963267948966), Pose(x=25.0, y=7.0, heading=0.0)]
 
     pose = Pose(1.5, -10, 0 * math.pi/4)
     speed = 0
@@ -38,7 +38,7 @@ if __name__ == '__main__':
 
     curvature_times = []
 
-    pursuit = PurePursuitController(path, lookahead, interpol_strat=InterpolationStrategy.BIARC,
+    pursuit = PurePursuitController(path, lookahead, interpol_strat=InterpolationStrategy.QUINTIC,
                                     cruise_speed=max_speed, acc=acc)
     pursuit.init()
     print("Done with spline")

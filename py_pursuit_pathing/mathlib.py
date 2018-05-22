@@ -99,6 +99,7 @@ class LineSegment:
         self.intersect = point1
         self.point1 = point1
         self.point2 = point2
+        self.curvature = math.inf
 
     def plot(self, plt, resolution=0.1):
         t0 = 0
@@ -217,8 +218,10 @@ def polynomial_from_parameters(parameters: np.ndarray) -> Polynomial:
     parameters = list(parameters.flatten().tolist())[0]  # ew ew ew
     return Polynomial(parameters)
 
+
 def sgn(x):
     return 0 if x == 0 else x/abs(x)
+
 
 class Arc:
     def __init__(self, center: Vector2, radius: float, start_angle: float, end_angle: float,
@@ -229,6 +232,8 @@ class Arc:
         self.end_angle: float = end_angle
 
         self._cache = {}
+
+        self.curvature = 1 / radius if radius != 0 else 0
 
     def r(self, t: float) -> Vector2:
         if t in self._cache:
@@ -271,6 +276,7 @@ class Arc:
 
     def __repr__(self):
         return f"Arc(center={self.center}, radius={self.radius}, start_angle={self.start_angle}, end_angle={self.end_angle}"
+
 
 def lerp(start: float, end: float, param: float) -> float:
     return (end - start) * param + start
