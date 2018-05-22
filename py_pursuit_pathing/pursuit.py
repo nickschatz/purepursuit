@@ -49,10 +49,15 @@ class SplinePath(Path):
         else:
             raise ValueError(f"Invalid interpolation strategy {interpolation_strategy}")
         if interpolation_strategy != InterpolationStrategy.BIARC:
-            self.spline = approximate_spline(self.spline)
+            self.spline = approximate_spline(self.spline, error=.25/12)
 
-    def get_robot_path_position(self, pose: Pose) -> Tuple[float, float]:
-        return self.spline.get_closest_t_to(pose)
+    def get_robot_path_position(self, pose: Pose, last_t: float = None) -> Tuple[float, float]:
+        if last_t is None:
+            window = (0, 1)
+        else:
+            window_size = .5 / self.spline.length
+            window = (last_t - window_size, last_t + window_size)
+        return self.spline.get_closest_t_to(pose, window=window)
 
     def calc_goal(self, pose: Pose,
                   lookahead_radius: float, t_robot: float):
@@ -92,6 +97,7 @@ class PurePursuitController:
                                            cruise_speed=cruise_speed, acc=acc)
         self.cte = 0
         self.current_lookahead = 0
+        self.t_robot = 0
 
     def init(self):
         """
@@ -100,6 +106,7 @@ class PurePursuitController:
         """
         self.unpassed_waypoints = self.waypoints[:]
         self.cte = 0
+        self.t_robot = 0
 
     def get_path_length(self):
         return self.path.spline.length
@@ -123,8 +130,8 @@ class PurePursuitController:
         :return: The curvature of the path, the cross track error, and the speed at which to drive at (feet/sec)
         """
 
-        t_robot, self.cte = self.path.get_robot_path_position(pose)
-        mp_idx = round(t_robot * len(self.speed_profile))
+        self.t_robot, self.cte = self.path.get_robot_path_position(pose, last_t=self.t_robot)
+        mp_idx = round(self.t_robot * len(self.speed_profile))
         if mp_idx >= len(self.speed_profile):
             mp_idx = len(self.speed_profile)-1
         if mp_idx < 0:
@@ -134,7 +141,7 @@ class PurePursuitController:
 
         lookahead_radius = self.lookahead(speed, self.cte)
         self.current_lookahead = lookahead_radius
-        goal, dist = self.path.calc_goal(pose, lookahead_radius, t_robot)
+        goal, dist = self.path.calc_goal(pose, lookahead_radius, self.t_robot)
 
         # We're probably only going to pass one waypoint per loop (or have multiple chances to "pass" a waypoint)
         # We need to keep track of the waypoints so we know when we can go to the end

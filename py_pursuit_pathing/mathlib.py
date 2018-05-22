@@ -259,7 +259,8 @@ class Arc:
     def invert(self, angle: float) -> float:
         if self.end_angle - self.start_angle == 0:
             return 0
-        return (angle - self.start_angle) / (self.end_angle - self.start_angle)
+        t = (angle - self.start_angle) / (self.end_angle - self.start_angle)
+        return t
 
     def project(self, point: Vector2):
         angle = (self.center - point).angle()

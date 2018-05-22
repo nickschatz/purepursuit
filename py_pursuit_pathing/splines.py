@@ -469,18 +469,21 @@ class ArcSpline(Spline):
     def arc_length(self, t: float) -> float:
         return super().arc_length(t)
 
-    def get_closest_t_to(self, point: Vector2) -> Tuple[float, float]:
+    def get_closest_t_to(self, point: Vector2, window: Tuple[float, float] =(0, 1)) -> Tuple[float, float]:
         min_dist = 1e100
         min_t = 0
+        wind_begin = window[0]
+        wind_end = window[1]
         for _part in self.parts:
-            try:
-                t = _part.project(point)
-            except ValueError:
-                continue
-            dist = point.distance(self.get_point(t))
-            if dist < min_dist:
-                min_t = t
-                min_dist = dist
+            if _part.t_begin <= wind_end and _part.t_end >= wind_begin:
+                try:
+                    t = _part.project(point)
+                except ValueError:
+                    continue
+                dist = point.distance(self.get_point(t))
+                if dist < min_dist:
+                    min_t = t
+                    min_dist = dist
         if min_dist == 1e100:
             print("!! Warning, dropped out of closest-point !!")
             a_sc = (point - self.get_point(1)) * self.get_unit_tangent_vector(1)
@@ -489,7 +492,7 @@ class ArcSpline(Spline):
         return min_t, min_dist
 
 
-def approximate_spline(spline: Spline) -> ArcSpline:
+def approximate_spline(spline: Spline, error=.25/12) -> ArcSpline:
     def split(start, end, eps=0.25/12, depth=0) -> [float]:
         """
         Recursively split spline. Returns end points of biarcs
@@ -519,7 +522,7 @@ def approximate_spline(spline: Spline) -> ArcSpline:
         else:
             return [end]
         mid = mathlib.lerp(start, end, 0.5)
-        return split(start, mid, depth=depth+1) + split(mid, end, depth=depth+1)
+        return split(start, mid, depth=depth+1, eps=error) + split(mid, end, depth=depth+1, eps=error)
 
-    splits = [0] + split(0, 1)
+    splits = [0] + split(0, 1, eps=error)
     return ArcSpline(list(map(lambda x: spline.get_pose(x), splits)))

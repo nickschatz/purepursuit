@@ -5,11 +5,10 @@ from py_pursuit_pathing.mathlib import Vector2
 from py_pursuit_pathing.pose import Pose
 
 if __name__ == '__main__':
-    # waypoints = [Pose(x=1.5, y=-10.0, heading=0.0), Pose(x=17.0, y=-10.0, heading=0.0), Pose(x=20.0, y=0.0, heading=1.5707963267948966), Pose(x=20.0, y=7.5, heading=1.5707963267948966), Pose(x=24.5, y=7.5, heading=-0.7853981633974483)]
-    waypoints = [Pose(x=1.5, y=-10.0, heading=0.0), Pose(x=15.0, y=-10.0, heading=0.0), Pose(x=19.0, y=-8.0, heading=0.7853981633974483), Pose(x=20.5, y=6.0, heading=1.3962634015954636), Pose(x=24.0, y=7.0, heading=0.0)]
+    waypoints = [Pose(x=1.5, y=-10.0, heading=0.0), Pose(x=20.0, y=0.0, heading=1.5707963267948966), Pose(x=25.0, y=7.0, heading=0.0)]
     # waypoints = pursuit.flip_waypoints_y(waypoints)
     spline1 = splines.QuinticSpline(waypoints)
-    spline2 = splines.approximate_spline(spline1)
+    spline2 = splines.approximate_spline(spline1, error=1/12)
     reference_frame = Pose(0, 0, 0)
     for wp in map(lambda x: x.translated(reference_frame), waypoints):
         plot.plot(wp.x, wp.y, 'bo')
@@ -39,17 +38,21 @@ if __name__ == '__main__':
     plot.plot(xs, ys)
     plot.plot(xs2, ys2)
     # plot.plot(xs3, ys3)
-
+    for x,y in map(lambda x: (x.x, x.y), spline2.waypoints):
+        plot.plot(x, y, 'rx')
 
     ts = []
     curv = []
+    curv2 = []
     resolution = 1000
     for t_ in range(resolution):
         t = t_ / resolution
         ts += [t]
-        curv += [spline1.curvature(t)]
+        curv += [abs(spline1.curvature(t))]
+        curv2 += [abs(spline2.curvature(t))]
     plot.figure(2)
     plot.plot(ts, curv)
+    plot.plot(ts, curv2)
 
     plot.show()
 
